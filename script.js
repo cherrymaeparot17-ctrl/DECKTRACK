@@ -1,9 +1,13 @@
+const db = supabase.createClient(
+    "https://afnkvhshypzopwclerxy.supabase.co",
+    "sb_publishable_gj_OKhp5OuT96MqHWgMNqw_RP2L4QgW"
+);
 
 // ==========================================
-// DECKTRACK - JAVASCRIPT
+// DECKTRACK - JAVASCRIPT (Supabase version)
 // ==========================================
-
-// Open access: any non-empty CTU ID number can enter this local demo.
+// Login checks the "students" table. Equipment, borrowing, returns and
+// history are stored in the "items" and "borrows" tables.
 
 const $ = id => document.getElementById(id);
 
@@ -31,72 +35,123 @@ const dateText = value => value
     ? new Date(value + "T00:00:00").toLocaleDateString()
     : "—";
 
+const capitalize = text => {
+    const s = String(text ?? "");
+    return s.charAt(0).toUpperCase() + s.slice(1);
+};
+
 // ==========================================
-// DATA STORAGE
+// DATA (loaded from Supabase)
 // ==========================================
 
-const sampleEquipment = [
-    {
-        id: 1,
-        name: "Digital Multimeter",
-        barcode: "DT1001",
-        category: "Measuring Tool",
-        quantity: 5,
-        available: 5
-    },
-    {
-        id: 2,
-        name: "Arduino Uno",
-        barcode: "DT1002",
-        category: "Microcontroller",
-        quantity: 10,
-        available: 10
-    },
-    {
-        id: 3,
-        name: "Oscilloscope",
-        barcode: "DT1003",
-        category: "Testing Equipment",
-        quantity: 3,
-        available: 3
-    },
-    {
-        id: 4,
-        name: "Soldering Iron",
-        barcode: "DT1004",
-        category: "Hand Tool",
-        quantity: 8,
-        available: 8
-    },
-    {
-        id: 5,
-        name: "Breadboard",
-        barcode: "DT1005",
-        category: "Circuit Component",
-        quantity: 15,
-        available: 15
+const BORROW_SELECT = "*, students(name, role), items(name)";
+
+let equipment = [];
+let transactions = [];
+let loadErrorShown = false;
+
+// The old demo data lived in the browser. It is no longer used.
+try {
+    localStorage.removeItem("deckEquipment");
+    localStorage.removeItem("deckTransactions");
+} catch (err) {
+    // Browser storage may be blocked. Nothing to clean up in that case.
+}
+
+// Turns a row from the "borrows" table into the shape the screens use.
+function mapBorrow(row) {
+    return {
+        id: row.id,
+        borrower: row.students?.name || row.student_id,
+        borrowerId: row.student_id,
+        role: capitalize(row.students?.role || "student"),
+        equipmentName: row.items?.name || row.item_barcode,
+        barcode: row.item_barcode,
+        quantity: row.quantity ?? 1,
+        borrowedAt: row.borrowed_at
+            ? new Date(row.borrowed_at).toLocaleString()
+            : "",
+        dueDate: row.due_date || "",
+        returnedAt: row.returned_at
+            ? new Date(row.returned_at).toLocaleString()
+            : "",
+        status: row.returned_at ? "Returned" : "Borrowed"
+    };
+}
+
+async function loadData() {
+    const [itemsRes, borrowsRes] = await Promise.all([
+        db.from("items").select("*").order("name"),
+        db.from("borrows").select(BORROW_SELECT).order("id", { ascending: true })
+    ]);
+
+    if (itemsRes.error) throw itemsRes.error;
+    if (borrowsRes.error) throw borrowsRes.error;
+
+    equipment = itemsRes.data || [];
+    transactions = (borrowsRes.data || []).map(mapBorrow);
+}
+
+async function refreshData() {
+    try {
+        await loadData();
+        loadErrorShown = false;
+    } catch (err) {
+        console.error("Could not load data:", err);
+        if (!loadErrorShown) {
+            loadErrorShown = true;
+            alert("Could not load data from the database. " +
+                "Check your internet connection and refresh the page.");
+        }
     }
-];
-
-let equipment = JSON.parse(
-    localStorage.getItem("deckEquipment") || "null"
-) || sampleEquipment;
-
-let transactions = JSON.parse(
-    localStorage.getItem("deckTransactions") || "[]"
-);
-
-function saveData() {
-    localStorage.setItem("deckEquipment", JSON.stringify(equipment));
-    localStorage.setItem("deckTransactions", JSON.stringify(transactions));
+    renderAll();
 }
 
-function nextEquipmentId() {
-    return Math.max(0, ...equipment.map(item => item.id)) + 1;
+async function findStudent(id) {
+    const { data, error } = await db
+        .from("students")
+        .select("id_number, name, role")
+        .eq("id_number", id)
+        .maybeSingle();
+
+    if (error) throw error;
+    return data;
 }
 
-function nextTransactionId() {
-    return Math.max(0, ...transactions.map(item => item.id)) + 1;
+// Changes the "available" count of an item by +delta or -delta.
+// It only writes if nobody else changed the count in the meantime,
+// and retries a few times if someone did.
+async function adjustAvailable(barcode, delta) {
+    for (let attempt = 0; attempt < 4; attempt++) {
+        const { data: item, error } = await db
+            .from("items")
+            .select("quantity, available")
+            .eq("barcode", barcode)
+            .maybeSingle();
+
+        if (error) throw error;
+        if (!item) return { ok: false, reason: "notfound" };
+
+        const next = item.available + delta;
+
+        if (next < 0) {
+            return { ok: false, reason: "stock", available: item.available };
+        }
+
+        const capped = Math.min(next, item.quantity);
+
+        const { data: rows, error: updateError } = await db
+            .from("items")
+            .update({ available: capped })
+            .eq("barcode", barcode)
+            .eq("available", item.available)
+            .select("available");
+
+        if (updateError) throw updateError;
+        if (rows && rows.length) return { ok: true, available: rows[0].available };
+    }
+
+    return { ok: false, reason: "busy" };
 }
 
 function isOverdue(transaction) {
@@ -124,46 +179,72 @@ function emptyRow(columns, message = "No records found.") {
 // LOGIN AND LOGOUT
 // ==========================================
 
-$("loginForm").addEventListener("submit", function(event) {
+$("loginForm").addEventListener("submit", async function(event) {
     event.preventDefault();
 
     const userId = $("userId").value.trim();
+    const error = $("loginError");
+    const button = this.querySelector("button[type='submit']");
 
-    if (userId) {
+    error.textContent = "";
+
+    if (!userId) {
+        error.textContent = "Please enter your CTU ID number.";
+        return;
+    }
+
+    button.disabled = true;
+
+    try {
+        const student = await findStudent(userId);
+
+        if (!student) {
+            error.textContent =
+                "ID number not registered. Please see the laboratory administrator.";
+            return;
+        }
+
         sessionStorage.setItem("deckLoggedIn", "true");
-        sessionStorage.setItem("deckUserId", userId);
+        sessionStorage.setItem("deckUserId", student.id_number);
+        sessionStorage.setItem("deckUserName", student.name);
         showApp();
-    } else {
-        $("loginError").textContent = "Please enter your CTU ID number.";
+    } catch (err) {
+        console.error("Login check failed:", err);
+        error.textContent =
+            "Could not reach the database. Check your internet connection and try again.";
+    } finally {
+        button.disabled = false;
     }
 });
 
 function showApp() {
     $("loginPage").classList.add("hidden");
     $("mainApp").classList.remove("hidden");
+
     const userId = sessionStorage.getItem("deckUserId") || "CTU User";
-    $("currentUserLabel").textContent = userId;
-    $("currentUserAvatar").textContent = userId.charAt(0).toUpperCase();
-    $("currentUserTopAvatar").textContent = userId.charAt(0).toUpperCase();
+    const userName = sessionStorage.getItem("deckUserName") || userId;
+
+    $("currentUserLabel").textContent = userName;
+    $("currentUserAvatar").textContent = userName.charAt(0).toUpperCase();
+    $("currentUserTopAvatar").textContent = userName.charAt(0).toUpperCase();
     $("currentDate").textContent = new Date().toLocaleDateString(
         undefined,
         { year: "numeric", month: "long", day: "numeric" }
     );
+
     renderAll();
+    refreshData();
 }
 
 $("logoutBtn").addEventListener("click", () => {
     sessionStorage.removeItem("deckLoggedIn");
     sessionStorage.removeItem("deckUserId");
+    sessionStorage.removeItem("deckUserName");
     $("mainApp").classList.add("hidden");
     $("loginPage").classList.remove("hidden");
     $("loginForm").reset();
     $("loginError").textContent = "";
 });
-
-if (sessionStorage.getItem("deckLoggedIn") === "true") {
-    showApp();
-}
 
 // ==========================================
 // NAVIGATION
@@ -195,7 +276,10 @@ function openPage(pageId) {
     if (nav) nav.classList.add("active");
 
     $("pageTitle").textContent = pageNames[pageId] || "DECKTRACK";
+
+    // Show what we have right away, then fetch the latest from the database.
     renderAll();
+    refreshData();
 
     if (pageId === "borrow") {
         $("borrowBarcode").focus();
@@ -227,11 +311,11 @@ $("borrowBarcode").addEventListener("keydown", event => {
 
 function renderDashboard() {
     const total = equipment.reduce((sum, item) =>
-        sum + Number(item.quantity), 0
+        sum + Number(item.quantity || 0), 0
     );
 
     const available = equipment.reduce((sum, item) =>
-        sum + Number(item.available), 0
+        sum + Number(item.available || 0), 0
     );
 
     const borrowed = transactions
@@ -270,9 +354,9 @@ function renderEquipment() {
     const search = $("equipmentSearch").value.toLowerCase();
 
     const filtered = equipment.filter(item =>
-        item.name.toLowerCase().includes(search) ||
-        item.barcode.toLowerCase().includes(search) ||
-        item.category.toLowerCase().includes(search)
+        String(item.name || "").toLowerCase().includes(search) ||
+        String(item.barcode || "").toLowerCase().includes(search) ||
+        String(item.category || "").toLowerCase().includes(search)
     );
 
     $("equipmentCount").textContent =
@@ -283,7 +367,7 @@ function renderEquipment() {
             <tr>
                 <td><strong>${escapeHTML(item.name)}</strong></td>
                 <td>${escapeHTML(item.barcode)}</td>
-                <td>${escapeHTML(item.category)}</td>
+                <td>${escapeHTML(item.category || "—")}</td>
                 <td>${item.quantity}</td>
                 <td>${item.available}</td>
                 <td>${statusBadge(
@@ -291,7 +375,7 @@ function renderEquipment() {
                 )}</td>
                 <td>
                     <button class="small-btn delete-btn"
-                        data-delete="${item.id}">Delete</button>
+                        data-delete="${escapeHTML(item.barcode)}">Delete</button>
                 </td>
             </tr>
         `).join("")
@@ -310,16 +394,17 @@ $("cancelAdd").addEventListener("click", () => {
     $("equipmentForm").reset();
 });
 
-$("equipmentForm").addEventListener("submit", event => {
+$("equipmentForm").addEventListener("submit", async event => {
     event.preventDefault();
 
     const name = $("eqName").value.trim();
     const barcode = $("eqBarcode").value.trim();
     const category = $("eqCategory").value.trim();
     const quantity = Number($("eqQuantity").value);
+    const button = event.target.querySelector("button[type='submit']");
 
     if (equipment.some(item =>
-        item.barcode.toLowerCase() === barcode.toLowerCase()
+        String(item.barcode).toLowerCase() === barcode.toLowerCase()
     )) {
         alert("This barcode is already registered.");
         return;
@@ -330,28 +415,42 @@ $("equipmentForm").addEventListener("submit", event => {
         return;
     }
 
-    equipment.push({
-        id: nextEquipmentId(),
-        name,
-        barcode,
-        category,
-        quantity,
-        available: quantity
-    });
+    button.disabled = true;
 
-    saveData();
-    $("equipmentForm").reset();
-    $("addEquipmentPanel").classList.add("hidden");
-    renderAll();
-    alert("Equipment added successfully!");
+    try {
+        const { error } = await db.from("items").insert({
+            barcode,
+            name,
+            category,
+            quantity,
+            available: quantity
+        });
+
+        if (error) {
+            alert(error.code === "23505"
+                ? "This barcode is already registered."
+                : "Could not save the equipment: " + error.message);
+            return;
+        }
+
+        $("equipmentForm").reset();
+        $("addEquipmentPanel").classList.add("hidden");
+        await refreshData();
+        alert("Equipment added successfully!");
+    } catch (err) {
+        console.error(err);
+        alert("Could not save the equipment: " + err.message);
+    } finally {
+        button.disabled = false;
+    }
 });
 
-$("equipmentTable").addEventListener("click", event => {
+$("equipmentTable").addEventListener("click", async event => {
     const button = event.target.closest("[data-delete]");
     if (!button) return;
 
-    const id = Number(button.dataset.delete);
-    const item = equipment.find(eq => eq.id === id);
+    const barcode = button.dataset.delete;
+    const item = equipment.find(eq => eq.barcode === barcode);
 
     if (!item) return;
 
@@ -366,9 +465,24 @@ $("equipmentTable").addEventListener("click", event => {
 
     if (!confirm(`Delete ${item.name} from the inventory?`)) return;
 
-    equipment = equipment.filter(eq => eq.id !== id);
-    saveData();
-    renderAll();
+    try {
+        const { error } = await db
+            .from("items")
+            .delete()
+            .eq("barcode", item.barcode);
+
+        if (error) {
+            alert(error.code === "23503"
+                ? "This equipment has borrowing history, so it cannot be deleted."
+                : "Could not delete the equipment: " + error.message);
+            return;
+        }
+
+        await refreshData();
+    } catch (err) {
+        console.error(err);
+        alert("Could not delete the equipment: " + err.message);
+    }
 });
 
 // ==========================================
@@ -443,81 +557,166 @@ function printBorrowReceipt(transaction) {
     window.print();
 }
 
-let lastBorrowedTransaction = null;
+function setBorrowMessage(text, type) {
+    const message = $("borrowMessage");
+    message.className = "message";
+    message.textContent = text;
+    if (type) message.classList.add(type);
+}
 
-$("borrowForm").addEventListener("submit", event => {
-    event.preventDefault();
+// Fills the name and role fields from the students table.
+function fillBorrower(student) {
+    $("borrowerName").value = student ? student.name : "";
+    $("borrowerRole").value = student ? capitalize(student.role) : "";
+}
+
+$("borrowerId").addEventListener("change", async () => {
+    const id = $("borrowerId").value.trim();
+    fillBorrower(null);
+
+    if (!id) return;
+
+    try {
+        const student = await findStudent(id);
+        fillBorrower(student);
+
+        if (!student) {
+            setBorrowMessage("ID number not registered.", "error");
+        } else {
+            setBorrowMessage("", "");
+        }
+    } catch (err) {
+        console.error(err);
+        setBorrowMessage("Could not check the ID number. Try again.", "error");
+    }
+});
+
+let lastBorrowedTransaction = null;
+let borrowBusy = false;
+
+async function handleBorrow() {
     lastBorrowedTransaction = null;
     $("printReceiptBtn").classList.add("hidden");
 
-    const borrower = $("borrowerName").value.trim();
     const borrowerId = $("borrowerId").value.trim();
-    const role = $("borrowerRole").value;
     const barcode = $("borrowBarcode").value.trim();
     const quantity = Number($("borrowQuantity").value);
     const dueDate = $("dueDate").value;
 
-    const item = equipment.find(eq =>
-        eq.barcode.toLowerCase() === barcode.toLowerCase()
+    const student = await findStudent(borrowerId);
+
+    if (!student) {
+        fillBorrower(null);
+        setBorrowMessage(
+            "ID number not registered. Ask the laboratory administrator to add it first.",
+            "error"
+        );
+        return;
+    }
+
+    fillBorrower(student);
+
+    const findItem = () => equipment.find(eq =>
+        String(eq.barcode).toLowerCase() === barcode.toLowerCase()
     );
 
-    const message = $("borrowMessage");
-    message.className = "message";
+    let item = findItem();
 
     if (!item) {
-        message.textContent = "Equipment barcode not found.";
-        message.classList.add("error");
+        await refreshData();
+        item = findItem();
+    }
+
+    if (!item) {
+        setBorrowMessage("Equipment barcode not found.", "error");
         return;
     }
 
     if (!Number.isInteger(quantity) || quantity < 1) {
-        message.textContent = "Enter a valid quantity.";
-        message.classList.add("error");
-        return;
-    }
-
-    if (quantity > item.available) {
-        message.textContent =
-            `Only ${item.available} item(s) are currently available.`;
-        message.classList.add("error");
+        setBorrowMessage("Enter a valid quantity.", "error");
         return;
     }
 
     if (!dueDate || dueDate < today()) {
-        message.textContent = "Please select a valid return date.";
-        message.classList.add("error");
+        setBorrowMessage("Please select a valid return date.", "error");
         return;
     }
 
-    item.available -= quantity;
+    // Take the items out of stock first.
+    const stock = await adjustAvailable(item.barcode, -quantity);
 
-    const transaction = {
-        id: nextTransactionId(),
-        borrower,
-        borrowerId,
-        role,
-        equipmentName: item.name,
-        barcode: item.barcode,
-        quantity,
-        borrowedAt: now(),
-        dueDate,
-        returnedAt: "",
-        status: "Borrowed"
-    };
-    transactions.push(transaction);
+    if (!stock.ok) {
+        if (stock.reason === "stock") {
+            setBorrowMessage(
+                `Only ${stock.available} item(s) are currently available.`,
+                "error"
+            );
+        } else if (stock.reason === "busy") {
+            setBorrowMessage(
+                "The equipment record is busy. Please try again.",
+                "error"
+            );
+        } else {
+            setBorrowMessage("Equipment barcode not found.", "error");
+        }
+        await refreshData();
+        return;
+    }
+
+    // Then record the borrowing. If that fails, put the stock back.
+    const { data, error } = await db
+        .from("borrows")
+        .insert({
+            student_id: student.id_number,
+            item_barcode: item.barcode,
+            quantity,
+            due_date: dueDate
+        })
+        .select(BORROW_SELECT)
+        .single();
+
+    if (error) {
+        console.error(error);
+        await adjustAvailable(item.barcode, quantity);
+        setBorrowMessage(
+            "Could not record the borrowing: " + error.message,
+            "error"
+        );
+        await refreshData();
+        return;
+    }
+
+    const transaction = mapBorrow(data);
     lastBorrowedTransaction = transaction;
 
-    saveData();
-
     $("borrowForm").reset();
+    fillBorrower(null);
     $("borrowQuantity").value = 1;
     $("borrowBarcode").focus();
-    message.textContent =
-        `Borrowing recorded successfully for ${borrower}. Print the receipt below.`;
-    message.classList.add("success");
+
+    setBorrowMessage(
+        `Borrowing recorded successfully for ${transaction.borrower}. Print the receipt below.`,
+        "success"
+    );
     $("printReceiptBtn").classList.remove("hidden");
 
-    renderAll();
+    await refreshData();
+}
+
+$("borrowForm").addEventListener("submit", async event => {
+    event.preventDefault();
+
+    if (borrowBusy) return;
+    borrowBusy = true;
+
+    try {
+        await handleBorrow();
+    } catch (err) {
+        console.error(err);
+        setBorrowMessage("Something went wrong: " + err.message, "error");
+    } finally {
+        borrowBusy = false;
+    }
 });
 
 $("printReceiptBtn").addEventListener("click", () => {
@@ -553,45 +752,63 @@ function renderReturnTable() {
 
 function findReturnTransaction(barcode) {
     return transactions.find(t =>
-        t.barcode.toLowerCase() === barcode.toLowerCase() &&
+        String(t.barcode).toLowerCase() === barcode.toLowerCase() &&
         t.status === "Borrowed"
     );
 }
 
-function processReturn(transaction) {
+async function processReturn(transaction) {
     if (!transaction || transaction.status !== "Borrowed") return;
-
-    const item = equipment.find(eq => eq.barcode === transaction.barcode);
-
-    if (!item) {
-        alert("Equipment record not found.");
-        return;
-    }
 
     if (!confirm(
         `Confirm return of ${transaction.equipmentName} from ${transaction.borrower}?`
     )) return;
 
-    item.available = Math.min(
-        item.quantity,
-        item.available + transaction.quantity
-    );
+    try {
+        // Mark the borrowing as returned (only if it is still open).
+        const { data: updated, error } = await db
+            .from("borrows")
+            .update({ returned_at: new Date().toISOString() })
+            .eq("id", transaction.id)
+            .is("returned_at", null)
+            .select("id");
 
-    transaction.status = "Returned";
-    transaction.returnedAt = now();
+        if (error) throw error;
 
-    saveData();
-    $("returnResult").innerHTML =
-        `<div class="result-box">Equipment returned successfully.</div>`;
-    renderAll();
+        if (!updated || !updated.length) {
+            alert("This item was already returned.");
+            await refreshData();
+            return;
+        }
+
+        // Put the items back in stock.
+        const stock = await adjustAvailable(
+            transaction.barcode,
+            transaction.quantity
+        );
+
+        if (!stock.ok && stock.reason === "notfound") {
+            alert("Equipment record not found, but the return was saved.");
+        }
+
+        $("returnResult").innerHTML =
+            `<div class="result-box">Equipment returned successfully.</div>`;
+        await refreshData();
+    } catch (err) {
+        console.error(err);
+        alert("Could not save the return: " + err.message);
+    }
 }
 
-$("returnForm").addEventListener("submit", event => {
+$("returnForm").addEventListener("submit", async event => {
     event.preventDefault();
 
     const barcode = $("returnBarcode").value.trim();
-    const transaction = findReturnTransaction(barcode);
     const result = $("returnResult");
+
+    await refreshData();
+
+    const transaction = findReturnTransaction(barcode);
 
     if (!transaction) {
         result.innerHTML =
@@ -639,10 +856,10 @@ function renderHistory() {
     const search = $("historySearch").value.toLowerCase();
 
     const filtered = [...transactions].reverse().filter(t =>
-        t.borrower.toLowerCase().includes(search) ||
-        t.borrowerId.toLowerCase().includes(search) ||
-        t.equipmentName.toLowerCase().includes(search) ||
-        t.barcode.toLowerCase().includes(search)
+        String(t.borrower).toLowerCase().includes(search) ||
+        String(t.borrowerId).toLowerCase().includes(search) ||
+        String(t.equipmentName).toLowerCase().includes(search) ||
+        String(t.barcode).toLowerCase().includes(search)
     );
 
     $("historyTable").innerHTML = filtered.length
@@ -699,7 +916,7 @@ $("exportBtn").addEventListener("click", () => {
         .map(row => row.map(csvCell).join(","))
         .join("\r\n");
 
-    const blob = new Blob(["\uFEFF" + csv], {
+    const blob = new Blob(["﻿" + csv], {
         type: "text/csv;charset=utf-8;"
     });
 
@@ -714,7 +931,7 @@ $("exportBtn").addEventListener("click", () => {
 });
 
 // ==========================================
-// REFRESH ALL DATA
+// REFRESH ALL SCREENS
 // ==========================================
 
 function renderAll() {
@@ -723,4 +940,9 @@ function renderAll() {
     renderBorrowed();
     renderReturnTable();
     renderHistory();
+}
+
+// Stay logged in after a page refresh (same browser tab).
+if (sessionStorage.getItem("deckLoggedIn") === "true") {
+    showApp();
 }

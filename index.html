@@ -1,10 +1,10 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DECKTRACK | Laboratory Management</title>
+    
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -226,16 +226,16 @@
                         <div class="form-grid">
                             <div>
                                 <label>Borrower's Name</label>
-                                <input id="borrowerName" required placeholder="Full name">
+                                <input id="borrowerName" readonly placeholder="Filled in from the ID number">
                             </div>
                             <div>
                                 <label>Student / Employee ID</label>
-                                <input id="borrowerId" required placeholder="ID number">
+                                <input id="borrowerId" required placeholder="ID number" autocomplete="off">
                             </div>
                             <div>
                                 <label>Role</label>
-                                <select id="borrowerRole" required>
-                                    <option value="">Select role</option>
+                                <select id="borrowerRole" disabled>
+                                    <option value="">Filled in from the ID number</option>
                                     <option>Student</option>
                                     <option>Instructor</option>
                                 </select>
@@ -372,7 +372,9 @@
     </div>
 
     <section id="printReceipt" class="print-receipt" aria-label="Borrowing receipt"></section>
-
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="script.js"></script>
+    
+
 </body>
 </html>
