@@ -4,7 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DECKTRACK | Laboratory Management</title>
-    
+    <meta name="description" content="Borrow and return tracking for the Computer Engineering Laboratory.">
+
+    <!-- Installable app (PWA) -->
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#0f1d3d">
+    <link rel="icon" type="image/png" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="DECKTRACK">
+
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -374,6 +384,17 @@
     <section id="printReceipt" class="print-receipt" aria-label="Borrowing receipt"></section>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="script.js"></script>
+
+    <!-- Registers the service worker so the site can be installed -->
+    <script>
+        if ("serviceWorker" in navigator) {
+            window.addEventListener("load", function () {
+                navigator.serviceWorker.register("sw.js").catch(function (err) {
+                    console.warn("Service worker not registered:", err);
+                });
+            });
+        }
+    </script>
     
 
 </body>
