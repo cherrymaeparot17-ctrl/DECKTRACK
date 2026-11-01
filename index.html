@@ -14,28 +14,42 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="DECKTRACK">
-
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <!-- LOGIN PAGE -->
     <section id="loginPage" class="login-page">
-        <div class="login-card">
-            <img class="login-logo" src="icons/icon-512.png" alt="DECKTRACK">
-            <h1>DECKTRACK</h1>
-            <p>Smart Laboratory Equipment Tracking<br>
-               and Borrowing Management System</p>
+        <div class="login-glow g1"></div>
+        <div class="login-glow g2"></div>
 
-            <form id="loginForm">
-                <label for="userId">CTU ID Number</label>
-                <input type="text" id="userId" name="userId"
-                    placeholder="Enter your CTU ID number" autocomplete="username" required>
+        <div class="login-wrap">
+            <!-- Brand -->
+            <div class="login-brand">
+                <img class="login-logo" src="icons/icon-512.png" alt="DECKTRACK logo">
+                <div class="login-brand-text">
+                    <h1>DECK<span>TRACK</span></h1>
+                    <div class="login-tag"><i></i><b>LABORATORY SYSTEM</b></div>
+                </div>
+            </div>
 
-                <button type="submit" class="primary-btn">Log In</button>
-                <p id="loginError" class="error"></p>
-            </form>
-            <small>For CTU Danao students and instructors</small>
+            <!-- Login box -->
+            <div class="login-card">
+                <p>Smart Laboratory Equipment Tracking<br>
+                   and Borrowing Management System</p>
+
+                <form id="loginForm">
+                    <label for="userId">CTU ID Number</label>
+                    <input type="text" id="userId" name="userId"
+                        placeholder="Enter your CTU ID number" autocomplete="username" required>
+
+                    <button type="submit" class="primary-btn">Log In</button>
+                    <p id="loginError" class="error"></p>
+                </form>
+                <small>For CTU Danao students and instructors</small>
+            </div>
         </div>
     </section>
 
