@@ -5,7 +5,7 @@
 // - Never caches database traffic: borrow/return data always comes live
 //   from Supabase so records are never stale.
 
-const CACHE = "decktrack-shell-v2";
+const CACHE = "decktrack-shell-v3";
 
 const SHELL = [
     "./",
