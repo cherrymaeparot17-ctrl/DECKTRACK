@@ -872,3 +872,12 @@ footer {
         padding: 30px 22px;
     }
 }
+/* New logo image instead of the "D" text tile */
+.login-logo, .brand-logo {
+    display: block;
+    background: none;
+    border-radius: 0;
+    object-fit: contain;
+}
+.login-logo { width: 88px; height: 88px; margin: 0 auto 16px; }
+.brand-logo { width: 43px; height: 43px; }
