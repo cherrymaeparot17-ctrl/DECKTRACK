@@ -1,4 +1,3 @@
-
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 * {
@@ -1253,4 +1252,173 @@ footer {
         border-radius: 8px;
     }
     .main-content::-webkit-scrollbar-track, body::-webkit-scrollbar-track { background: #070a1f; }
+}
+
+
+/* ================= BACKGROUND DESIGN =================
+   Drawn artwork instead of a stretched photo, so it stays sharp on any screen:
+   - images/circuit.svg  : tileable glowing circuit-board pattern
+   - images/logo-*.png   : ICpEP.SE, CTU and CTU Danao Engineering logos
+   ===================================================== */
+
+@keyframes circuit-drift {
+    from { background-position: 0 0; }
+    to   { background-position: 640px 640px; }
+}
+@keyframes glow-float {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50%      { transform: translate(26px, -20px) scale(1.08); }
+}
+
+/* ---------- LOGIN (home) ---------- */
+.login-page {
+    padding-bottom: 130px;
+    background:
+        radial-gradient(1000px 620px at 18% 35%, rgba(36, 87, 214, .38), transparent 65%),
+        radial-gradient(760px 520px at 88% 4%, rgba(124, 92, 255, .26), transparent 65%),
+        radial-gradient(800px 520px at 92% 95%, rgba(255, 61, 127, .18), transparent 65%),
+        linear-gradient(160deg, #0b1236 0%, #070a1f 60%, #05071a 100%);
+}
+
+/* moving circuit board, fading out toward the centre so the form stays clear */
+.login-page::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: url("images/circuit.svg") 0 0 / 640px 640px;
+    opacity: .34;
+    animation: circuit-drift 120s linear infinite;
+    -webkit-mask-image: radial-gradient(ellipse 65% 60% at 50% 48%, rgba(0, 0, 0, .22) 0%, #000 100%);
+    mask-image: radial-gradient(ellipse 65% 60% at 50% 48%, rgba(0, 0, 0, .22) 0%, #000 100%);
+}
+
+/* big, faint ICpEP.SE seal behind the login box */
+.login-page::after {
+    content: "";
+    position: absolute;
+    z-index: 0;
+    pointer-events: none;
+    right: -120px;
+    top: 50%;
+    width: 600px;
+    height: 600px;
+    transform: translateY(-50%);
+    background: url("images/logo-icpep.png") center / contain no-repeat;
+    opacity: .07;
+}
+
+.login-glow { z-index: 0; animation: glow-float 14s ease-in-out infinite; }
+.login-glow.g2 { animation-duration: 18s; animation-direction: reverse; }
+.login-wrap { z-index: 1; }
+
+/* partner logos along the bottom */
+.login-partners {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 22px;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+.login-partners .logos {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 26px;
+}
+.login-partners img {
+    height: 58px;
+    width: auto;
+    filter: drop-shadow(0 6px 14px rgba(0, 0, 0, .5));
+    transition: transform .2s, filter .2s;
+}
+.login-partners img:hover {
+    transform: translateY(-3px) scale(1.05);
+    filter: drop-shadow(0 10px 20px rgba(0, 229, 255, .35));
+}
+.login-partners .divider {
+    width: 1px;
+    height: 36px;
+    background: linear-gradient(transparent, rgba(140, 170, 255, .5), transparent);
+}
+.login-partners p {
+    font-family: 'Sora', 'Inter', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #8fa0d0;
+    text-align: center;
+}
+
+/* ---------- DASHBOARD (all app pages) ---------- */
+@media screen {
+    .app { position: relative; background: #070a1f; }
+
+    /* colour glows */
+    .app::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        background:
+            radial-gradient(900px 560px at 88% -5%, rgba(106, 61, 240, .32), transparent 70%),
+            radial-gradient(720px 500px at 22% 108%, rgba(0, 229, 255, .15), transparent 70%),
+            radial-gradient(620px 420px at 100% 100%, rgba(255, 61, 127, .12), transparent 70%),
+            linear-gradient(180deg, #0b1236 0%, #070a1f 100%);
+    }
+
+    /* circuit pattern, brighter toward the top-right and fading toward the bottom-left */
+    .app::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        background: url("images/circuit.svg") 0 0 / 640px 640px;
+        opacity: .2;
+        -webkit-mask-image: linear-gradient(225deg, #000 0%, rgba(0, 0, 0, .25) 100%);
+        mask-image: linear-gradient(225deg, #000 0%, rgba(0, 0, 0, .25) 100%);
+    }
+
+    .main-content {
+        position: relative;
+        z-index: 1;
+        background: none;
+    }
+
+    /* faint ICpEP.SE seal in the corner */
+    .main-content::before {
+        content: "";
+        position: fixed;
+        right: -70px;
+        bottom: -70px;
+        width: 520px;
+        height: 520px;
+        z-index: -1;
+        pointer-events: none;
+        background: url("images/logo-icpep.png") center / contain no-repeat;
+        opacity: .07;
+    }
+}
+
+/* ---------- Small screens ---------- */
+@media (max-width: 860px) {
+    .login-page::after { width: 420px; height: 420px; right: -150px; top: 30%; }
+    .login-partners img { height: 46px; }
+    .login-partners .logos { gap: 18px; }
+}
+@media (max-width: 750px) {
+    .main-content::before { width: 340px; height: 340px; right: -90px; bottom: -90px; }
+}
+
+/* ---------- Respect "reduce motion" ---------- */
+@media (prefers-reduced-motion: reduce) {
+    .login-page::before, .login-glow { animation: none; }
 }
