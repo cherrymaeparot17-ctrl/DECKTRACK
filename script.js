@@ -39,6 +39,27 @@ const dateText = value => value
     ? new Date(value + "T00:00:00").toLocaleDateString()
     : "—";
 
+// Date and time in Philippine time, as {date: "YYYY-MM-DD", time: "HH:MM"}.
+function manilaParts(d) {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Manila", year: "numeric", month: "2-digit",
+        day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+    }).formatToParts(d);
+    const get = type => parts.find(p => p.type === type).value;
+    return {
+        date: `${get("year")}-${get("month")}-${get("day")}`,
+        time: `${get("hour")}:${get("minute")}`
+    };
+}
+
+// "Nov 12, 2026, 5:00 PM" when the exact time is known, otherwise just the date.
+const dueText = t => t.dueAt
+    ? new Date(t.dueAt).toLocaleString(undefined, {
+        month: "short", day: "numeric", year: "numeric",
+        hour: "numeric", minute: "2-digit"
+    })
+    : dateText(t.dueDate);
+
 const capitalize = text => {
     const s = String(text ?? "");
     return s.charAt(0).toUpperCase() + s.slice(1);
@@ -77,6 +98,7 @@ function mapBorrow(row) {
             ? new Date(row.borrowed_at).toLocaleString()
             : "",
         dueDate: row.due_date || "",
+        dueAt: row.due_at || "",
         returnedAt: row.returned_at
             ? new Date(row.returned_at).toLocaleString()
             : "",
@@ -163,8 +185,9 @@ async function adjustAvailable(barcode, delta) {
 }
 
 function isOverdue(transaction) {
-    return transaction.status === "Borrowed" &&
-        transaction.dueDate < today();
+    if (transaction.status !== "Borrowed") return false;
+    if (transaction.dueAt) return Date.now() > new Date(transaction.dueAt).getTime();
+    return transaction.dueDate < today();
 }
 
 function transactionStatus(transaction) {
@@ -291,6 +314,14 @@ $("savePhoneBtn").addEventListener("click", async () => {
     msg.textContent = "Saved. You will be emailed when your equipment is due.";
 });
 
+$("dueQuick").addEventListener("change", () => {
+    const hours = Number($("dueQuick").value);
+    if (!hours) return;
+    const parts = manilaParts(new Date(Date.now() + hours * 3600000));
+    $("dueDate").value = parts.date;
+    $("dueTime").value = parts.time;
+});
+
 $("logoutBtn").addEventListener("click", () => {
     sessionStorage.removeItem("deckLoggedIn");
     sessionStorage.removeItem("deckUserId");
@@ -391,7 +422,7 @@ function renderDashboard() {
 
     const notice = $("dueNotice");
     const dueToday = transactions.filter(t =>
-        t.status === "Borrowed" && t.dueDate === today());
+        t.status === "Borrowed" && !isOverdue(t) && t.dueDate === today());
     const late = transactions.filter(isOverdue);
     const parts = [];
     if (late.length) parts.push(`${late.length} overdue item(s): ` +
@@ -466,7 +497,7 @@ function renderBorrowed() {
                 <td>${escapeHTML(t.equipmentName)}</td>
                 <td>${escapeHTML(t.barcode)}</td>
                 <td>${t.quantity}</td>
-                <td>${dateText(t.dueDate)}</td>
+                <td>${dueText(t)}</td>
                 <td>${statusBadge(transactionStatus(t))}</td>
             </tr>
         `).join("")
@@ -514,7 +545,7 @@ function printBorrowReceipt(transaction) {
         </div>
         <div class="receipt-row receipt-due">
             <strong>Return By</strong>
-            <strong>${escapeHTML(dateText(transaction.dueDate))}</strong>
+            <strong>${escapeHTML(dueText(transaction))}</strong>
         </div>
         <p class="receipt-note">Please return the equipment on or before the due date. Keep this receipt for your records.</p>
         <div class="receipt-signature">Borrower's Signature</div>
@@ -548,6 +579,8 @@ async function handleBorrow() {
     const barcode = $("borrowBarcode").value.trim();
     const quantity = Number($("borrowQuantity").value);
     const dueDate = $("dueDate").value;
+    const dueTime = $("dueTime").value;
+    const dueAt = new Date(`${dueDate}T${dueTime || "00:00"}:00+08:00`);
 
     const student = await findStudent(borrowerId);
 
@@ -580,8 +613,8 @@ async function handleBorrow() {
         return;
     }
 
-    if (!dueDate || dueDate < today()) {
-        setBorrowMessage("Please select a valid return date.", "error");
+    if (!dueDate || !dueTime || isNaN(dueAt.getTime()) || dueAt.getTime() <= Date.now()) {
+        setBorrowMessage("Please choose a return date and time that is later than now.", "error");
         return;
     }
 
@@ -607,16 +640,28 @@ async function handleBorrow() {
     }
 
     // Then record the borrowing. If that fails, put the stock back.
-    const { data, error } = await db
+    const insertBorrow = payload => db
         .from("borrows")
-        .insert({
-            student_id: student.id_number,
-            item_barcode: item.barcode,
-            quantity,
-            due_date: dueDate
-        })
+        .insert(payload)
         .select(BORROW_SELECT)
         .single();
+
+    const basePayload = {
+        student_id: student.id_number,
+        item_barcode: item.barcode,
+        quantity,
+        due_date: dueDate
+    };
+
+    let { data, error } = await insertBorrow({
+        ...basePayload, due_at: dueAt.toISOString()
+    });
+
+    // The new "due_at" column is missing (supabase_setup.sql not run yet):
+    // still record the borrowing, with the date only.
+    if (error && /due_at/.test(error.message || "")) {
+        ({ data, error } = await insertBorrow(basePayload));
+    }
 
     if (error) {
         console.error(error);
@@ -684,7 +729,7 @@ function renderReturnTable() {
                 <td>${escapeHTML(t.equipmentName)}</td>
                 <td>${escapeHTML(t.barcode)}</td>
                 <td>${escapeHTML(t.borrowedAt)}</td>
-                <td>${dateText(t.dueDate)}</td>
+                <td>${dueText(t)}</td>
                 <td>
                     <button class="small-btn return-btn"
                         data-return="${t.id}">Return</button>
@@ -768,7 +813,7 @@ $("returnForm").addEventListener("submit", async event => {
             Equipment: ${escapeHTML(transaction.equipmentName)}<br>
             Barcode: ${escapeHTML(transaction.barcode)}<br>
             Quantity: ${transaction.quantity}<br>
-            Due Date: ${dateText(transaction.dueDate)}<br>
+            Due: ${dueText(transaction)}<br>
             Status: ${escapeHTML(transactionStatus(transaction))}<br>
             <button class="primary-btn" id="confirmReturn">
                 Confirm Return
@@ -814,7 +859,7 @@ function renderHistory() {
                 <td>${escapeHTML(t.equipmentName)}</td>
                 <td>${escapeHTML(t.barcode)}</td>
                 <td>${escapeHTML(t.borrowedAt)}</td>
-                <td>${dateText(t.dueDate)}</td>
+                <td>${dueText(t)}</td>
                 <td>${escapeHTML(t.returnedAt || "—")}</td>
                 <td>${statusBadge(transactionStatus(t))}</td>
             </tr>
@@ -848,7 +893,7 @@ $("exportBtn").addEventListener("click", () => {
         t.barcode,
         t.quantity,
         t.borrowedAt,
-        t.dueDate,
+        dueText(t),
         t.returnedAt,
         transactionStatus(t)
     ]);

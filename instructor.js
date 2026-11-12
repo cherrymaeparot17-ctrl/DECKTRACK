@@ -70,6 +70,8 @@ function mapBorrow(row) {
             ? new Date(row.borrowed_at).toLocaleString()
             : "",
         dueDate: row.due_date || "",
+        dueAt: row.due_at || "",
+        overdueSentAt: row.overdue_email_sent_at || "",
         returnedAt: row.returned_at
             ? new Date(row.returned_at).toLocaleString()
             : "",
@@ -115,13 +117,32 @@ async function refreshData() {
     renderAll();
 }
 
+// Exact return time when known, otherwise the date only.
+const dueText = t => t.dueAt
+    ? new Date(t.dueAt).toLocaleString(undefined, {
+        month: "short", day: "numeric", year: "numeric",
+        hour: "numeric", minute: "2-digit"
+    })
+    : dateText(t.dueDate);
+
 function isOverdue(t) {
-    return t.status === "Borrowed" && t.dueDate < today();
+    if (t.status !== "Borrowed") return false;
+    if (t.dueAt) return Date.now() > new Date(t.dueAt).getTime();
+    return t.dueDate < today();
 }
 
 function isDueToday(t) {
-    return t.status === "Borrowed" && t.dueDate === today();
+    return t.status === "Borrowed" && !isOverdue(t) && t.dueDate === today();
 }
+
+// Due or overdue at this moment (used for the dashboard list).
+function isDueNow(t) {
+    if (t.status !== "Borrowed") return false;
+    if (t.dueAt) return Date.now() >= new Date(t.dueAt).getTime();
+    return t.dueDate <= today();
+}
+
+const dueSortKey = t => t.dueAt || (t.dueDate + "T08:00:00+08:00");
 
 function transactionStatus(t) {
     if (t.status === "Returned") return "Returned";
@@ -141,9 +162,12 @@ function emptyRow(columns, message = "No records found.") {
 
 function smsTag(t) {
     if (!smsReady) return `<span class="sms-tag none">Not set up</span>`;
+    if (t.overdueSentAt) {
+        return `<span class="sms-tag sent">2 emails sent</span>`;
+    }
     if (t.smsSentAt) {
         return `<span class="sms-tag sent">Sent ${escapeHTML(
-            new Date(t.smsSentAt).toLocaleDateString()
+            new Date(t.smsSentAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
         )}</span>`;
     }
     if (!t.email) return `<span class="sms-tag nophone">No email</span>`;
@@ -301,8 +325,8 @@ function renderDashboard() {
     $("overdueEquipment").textContent = overdue;
 
     const due = transactions
-        .filter(t => t.status === "Borrowed" && t.dueDate <= today())
-        .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+        .filter(isDueNow)
+        .sort((a, b) => new Date(dueSortKey(a)) - new Date(dueSortKey(b)));
 
     $("dueTable").innerHTML = due.length
         ? due.map(t => `
@@ -311,7 +335,7 @@ function renderDashboard() {
                     <span class="muted">${escapeHTML(t.borrowerId)}</span></td>
                 <td>${escapeHTML(t.equipmentName)}</td>
                 <td>${t.quantity}</td>
-                <td>${dateText(t.dueDate)}</td>
+                <td>${dueText(t)}</td>
                 <td>${isDueToday(t)
                     ? `<span class="badge borrowed">Due Today</span>`
                     : statusBadge("Overdue")}</td>
@@ -505,7 +529,7 @@ function renderHistory() {
                 <td>${escapeHTML(t.barcode)}</td>
                 <td>${t.quantity}</td>
                 <td>${escapeHTML(t.borrowedAt)}</td>
-                <td>${dateText(t.dueDate)}</td>
+                <td>${dueText(t)}</td>
                 <td>${escapeHTML(t.returnedAt || "—")}</td>
                 <td>${statusBadge(transactionStatus(t))}</td>
             </tr>
@@ -525,7 +549,7 @@ $("exportBtn").addEventListener("click", () => {
     const headers = [
         "Borrower", "ID Number", "Role", "Equipment",
         "Barcode", "Quantity", "Borrowed Date",
-        "Due Date", "Returned Date", "Status", "Due Text Sent"
+        "Due", "Returned Date", "Status", "Due Email Sent", "Late Email Sent"
     ];
 
     const rows = transactions.map(t => [
@@ -536,10 +560,11 @@ $("exportBtn").addEventListener("click", () => {
         t.barcode,
         t.quantity,
         t.borrowedAt,
-        t.dueDate,
+        dueText(t),
         t.returnedAt,
         transactionStatus(t),
-        t.smsSentAt ? new Date(t.smsSentAt).toLocaleString() : ""
+        t.smsSentAt ? new Date(t.smsSentAt).toLocaleString() : "",
+        t.overdueSentAt ? new Date(t.overdueSentAt).toLocaleString() : ""
     ]);
 
     const csvCell = value =>
@@ -670,7 +695,7 @@ $("studentTable").addEventListener("click", async event => {
     }
 });
 
-// Sends the emails that are waiting right now (the same job also runs every morning).
+// Sends the emails that are waiting right now (the same job also runs automatically every 15 minutes).
 $("sendDueBtn").addEventListener("click", async () => {
     const button = $("sendDueBtn");
     const message = $("sendDueMessage");

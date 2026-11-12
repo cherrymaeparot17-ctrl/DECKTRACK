@@ -242,7 +242,7 @@
 
                 <div class="content-card form-card">
                     <h3>Borrowing Form</h3>
-                    <p class="muted">Your name and ID are filled in from your login. Scan the equipment barcode and pick a return date.</p>
+                    <p class="muted">Your name and ID are filled in from your login. Scan the equipment barcode and pick when you will return it.</p>
 
                     <form id="borrowForm">
                         <div class="form-grid">
@@ -277,8 +277,26 @@
                                 <input id="borrowQuantity" type="number" min="1" value="1" required>
                             </div>
                             <div>
+                                <label>Return in (quick pick)</label>
+                                <select id="dueQuick">
+                                    <option value="">Choose hours...</option>
+                                    <option value="1">1 hour</option>
+                                    <option value="2">2 hours</option>
+                                    <option value="3">3 hours</option>
+                                    <option value="4">4 hours</option>
+                                    <option value="5">5 hours</option>
+                                    <option value="6">6 hours</option>
+                                    <option value="8">8 hours</option>
+                                </select>
+                            </div>
+                            <div>
                                 <label>Expected Return Date</label>
                                 <input id="dueDate" type="date" required>
+                            </div>
+                            <div>
+                                <label>Expected Return Time</label>
+                                <input id="dueTime" type="time" required>
+                                <small class="muted">You will get an email reminder at this time.</small>
                             </div>
                         </div>
                         <div class="form-actions">

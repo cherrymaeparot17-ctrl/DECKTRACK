@@ -179,7 +179,7 @@
                                     <th>Borrower</th>
                                     <th>Equipment</th>
                                     <th>Qty</th>
-                                    <th>Due Date</th>
+                                    <th>Due</th>
                                     <th>Status</th>
                                     <th>Email Reminder</th>
                                 </tr>
@@ -307,7 +307,7 @@
                                     <th>Barcode</th>
                                     <th>Qty</th>
                                     <th>Borrowed Date</th>
-                                    <th>Due Date</th>
+                                    <th>Due</th>
                                     <th>Returned Date</th>
                                     <th>Status</th>
                                 </tr>
@@ -330,8 +330,9 @@
                 <div class="content-card">
                     <h3>Due-Date Email Reminders</h3>
                     <div class="info-box">
-                        A text is sent <strong>once</strong> to a borrower when equipment they borrowed reaches its due date
-                        and has not been returned. Emails go out automatically every morning at 8:00 AM (Philippine time).
+                        An email is sent to a borrower when the <strong>return time</strong> they chose is reached, and
+                        <strong>one more</strong> 2 hours later if the equipment is still not returned. This runs automatically
+                        (checked every 15 minutes), so you don't need to click anything.
                         Use the button to send any that are waiting right now.
                     </div>
                     <div class="sms-actions">
