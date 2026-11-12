@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DECKTRACK | Instructor Portal</title>
-    <meta name="description" content="Instructor portal: check equipment and transactions, add equipment and manage due-date text messages.">
+    <meta name="description" content="Instructor portal: check equipment and transactions, add equipment and manage due-date email reminders.">
 
     <!-- Installable app (PWA) -->
     <link rel="manifest" href="manifest-instructor.webmanifest">
@@ -96,7 +96,7 @@
                 <span>◷</span> Transactions
             </button>
             <button class="nav-link" data-page="students">
-                <span>✉</span> Students &amp; SMS
+                <span>✉</span> Students &amp; Emails
             </button>
 
             <div class="sidebar-bottom">
@@ -168,7 +168,7 @@
                     <div class="card-heading">
                         <div>
                             <h3>Due Today and Overdue</h3>
-                            <p>Borrowers who need to bring equipment back, and whether they were texted</p>
+                            <p>Borrowers who need to bring equipment back, and whether they were emailed</p>
                         </div>
                         <button class="outline-btn" data-goto="students">Text Settings</button>
                     </div>
@@ -181,7 +181,7 @@
                                     <th>Qty</th>
                                     <th>Due Date</th>
                                     <th>Status</th>
-                                    <th>Text Message</th>
+                                    <th>Email Reminder</th>
                                 </tr>
                             </thead>
                             <tbody id="dueTable"></tbody>
@@ -322,20 +322,20 @@
             <section id="students" class="page">
                 <div class="section-heading">
                     <div>
-                        <h1>Students &amp; Text Messages</h1>
-                        <p>Save each student's mobile number so they are texted when borrowed equipment is due.</p>
+                        <h1>Students &amp; Email Reminders</h1>
+                        <p>Students add their own email on the Student Portal. You can also type or fix it here.</p>
                     </div>
                 </div>
 
                 <div class="content-card">
-                    <h3>Due-Date Text Messages</h3>
+                    <h3>Due-Date Email Reminders</h3>
                     <div class="info-box">
                         A text is sent <strong>once</strong> to a borrower when equipment they borrowed reaches its due date
-                        and has not been returned. Texts go out automatically every morning at 8:00 AM (Philippine time).
+                        and has not been returned. Emails go out automatically every morning at 8:00 AM (Philippine time).
                         Use the button to send any that are waiting right now.
                     </div>
                     <div class="sms-actions">
-                        <button class="primary-btn" id="sendDueBtn">Send Due-Date Texts Now</button>
+                        <button class="primary-btn" id="sendDueBtn">Send Due-Date Emails Now</button>
                         <span id="sendDueMessage" class="message" style="margin:0"></span>
                     </div>
                 </div>
@@ -352,7 +352,7 @@
                                     <th>Name</th>
                                     <th>ID Number</th>
                                     <th>Role</th>
-                                    <th>Mobile Number</th>
+                                    <th>Email</th>
                                     <th>Action</th>
                                 </tr>
                             </thead>

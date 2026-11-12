@@ -11,7 +11,7 @@ const db = supabase.createClient(
 // supabase_setup.sql). From here they can:
 //   - check every transaction and all equipment
 //   - add or delete equipment
-//   - save students' mobile numbers and send the due-date text messages
+//   - save students' emails and send the due-date email reminders
 // Students use the separate Student Portal (index.html).
 
 const $ = id => document.getElementById(id);
@@ -47,8 +47,8 @@ const capitalize = text => {
 // DATA (loaded from Supabase)
 // ==========================================
 
-const BORROW_SELECT = "*, students(name, role, phone), items(name)";
-const BORROW_SELECT_NO_PHONE = "*, students(name, role), items(name)";
+const BORROW_SELECT = "*, students(name, role, email), items(name)";
+const BORROW_SELECT_NO_EMAIL = "*, students(name, role), items(name)";
 
 let equipment = [];
 let transactions = [];
@@ -62,7 +62,7 @@ function mapBorrow(row) {
         borrower: row.students?.name || row.student_id,
         borrowerId: row.student_id,
         role: capitalize(row.students?.role || "student"),
-        phone: row.students?.phone || "",
+        email: row.students?.email || "",
         equipmentName: row.items?.name || row.item_barcode,
         barcode: row.item_barcode,
         quantity: row.quantity ?? 1,
@@ -83,10 +83,10 @@ async function loadData() {
     let borrowsRes = await db.from("borrows").select(BORROW_SELECT)
         .order("id", { ascending: true });
 
-    // The phone column does not exist yet: load without it and warn.
+    // The email column does not exist yet: load without it and warn.
     if (borrowsRes.error) {
         smsReady = false;
-        borrowsRes = await db.from("borrows").select(BORROW_SELECT_NO_PHONE)
+        borrowsRes = await db.from("borrows").select(BORROW_SELECT_NO_EMAIL)
             .order("id", { ascending: true });
     } else {
         smsReady = true;
@@ -146,7 +146,7 @@ function smsTag(t) {
             new Date(t.smsSentAt).toLocaleDateString()
         )}</span>`;
     }
-    if (!t.phone) return `<span class="sms-tag nophone">No number</span>`;
+    if (!t.email) return `<span class="sms-tag nophone">No email</span>`;
     return `<span class="sms-tag wait">Waiting to send</span>`;
 }
 
@@ -247,7 +247,7 @@ const pageNames = {
     dashboard: "Dashboard",
     equipment: "Equipment Inventory",
     history: "Transactions",
-    students: "Students & SMS"
+    students: "Students & Emails"
 };
 
 function openPage(pageId) {
@@ -336,7 +336,7 @@ function renderDashboard() {
 
     const note = $("setupNote");
     if (!smsReady) {
-        note.innerHTML = "<strong>Text messages are not set up yet.</strong> " +
+        note.innerHTML = "<strong>Email reminders are not set up yet.</strong> " +
             "Run <code>supabase_setup.sql</code> in the Supabase SQL Editor, then refresh this page.";
         note.classList.remove("hidden");
     } else {
@@ -561,21 +561,19 @@ $("exportBtn").addEventListener("click", () => {
 });
 
 // ==========================================
-// STUDENTS AND TEXT MESSAGES
+// STUDENTS AND EMAIL REMINDERS
 // ==========================================
 
 // Accepts 09XXXXXXXXX, 9XXXXXXXXX, 639XXXXXXXXX or +639XXXXXXXXX and
 // returns the 09XXXXXXXXX form, or null when it is not a Philippine mobile number.
-function normalizePhone(value) {
-    let digits = String(value || "").replace(/[^\d]/g, "");
-    if (digits.startsWith("63") && digits.length === 12) digits = "0" + digits.slice(2);
-    if (digits.length === 10 && digits.startsWith("9")) digits = "0" + digits;
-    return /^09\d{9}$/.test(digits) ? digits : null;
+function normalizeEmail(value) {
+    const v = String(value || "").trim().toLowerCase();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? v : null;
 }
 
 async function loadStudents() {
     let res = await db.from("students")
-        .select("id_number, name, role, phone")
+        .select("id_number, name, role, email")
         .order("name");
 
     if (res.error) {
@@ -612,10 +610,10 @@ function renderStudents() {
                 <td>${escapeHTML(s.id_number)}</td>
                 <td>${escapeHTML(capitalize(s.role))}</td>
                 <td>
-                    <input class="phone-input" type="tel" inputmode="tel"
-                        placeholder="09XXXXXXXXX"
-                        value="${escapeHTML(s.phone || "")}"
-                        data-phone-for="${escapeHTML(s.id_number)}"
+                    <input class="phone-input" type="email" inputmode="email"
+                        placeholder="name@gmail.com"
+                        value="${escapeHTML(s.email || "")}"
+                        data-email-for="${escapeHTML(s.id_number)}"
                         ${smsReady ? "" : "disabled"}>
                 </td>
                 <td>
@@ -634,13 +632,13 @@ $("studentTable").addEventListener("click", async event => {
     if (!button) return;
 
     const id = button.dataset.save;
-    const input = [...document.querySelectorAll("[data-phone-for]")]
-        .find(el => el.dataset.phoneFor === id);
+    const input = [...document.querySelectorAll("[data-email-for]")]
+        .find(el => el.dataset.emailFor === id);
     const raw = input.value.trim();
-    const phone = raw ? normalizePhone(raw) : null;
+    const email = raw ? normalizeEmail(raw) : null;
 
-    if (raw && !phone) {
-        alert("Enter a valid Philippine mobile number, for example 09171234567.");
+    if (raw && !email) {
+        alert("Enter a valid email address, for example juan@gmail.com.");
         return;
     }
 
@@ -648,7 +646,7 @@ $("studentTable").addEventListener("click", async event => {
 
     try {
         const { data, error } = await db.from("students")
-            .update({ phone })
+            .update({ email })
             .eq("id_number", id)
             .select("id_number");
 
@@ -659,8 +657,8 @@ $("studentTable").addEventListener("click", async event => {
         }
 
         const row = students.find(s => String(s.id_number) === id);
-        if (row) row.phone = phone;
-        input.value = phone || "";
+        if (row) row.email = email;
+        input.value = email || "";
         button.textContent = "Saved ✓";
         setTimeout(() => { button.textContent = "Save"; }, 1500);
         await refreshData();
@@ -672,7 +670,7 @@ $("studentTable").addEventListener("click", async event => {
     }
 });
 
-// Sends the texts that are waiting right now (the same job also runs every morning).
+// Sends the emails that are waiting right now (the same job also runs every morning).
 $("sendDueBtn").addEventListener("click", async () => {
     const button = $("sendDueBtn");
     const message = $("sendDueMessage");
@@ -682,27 +680,27 @@ $("sendDueBtn").addEventListener("click", async () => {
     message.textContent = "Sending...";
 
     try {
-        const { data, error } = await db.functions.invoke("send-due-sms", { body: {} });
+        const { data, error } = await db.functions.invoke("send-due-email", { body: {} });
 
         if (error) throw error;
 
         const sent = data?.sent ?? 0;
-        const noPhone = data?.no_phone ?? 0;
+        const noEmail = data?.no_email ?? 0;
         const failed = data?.failed ?? 0;
 
         message.className = "message " + (failed ? "error" : "success");
-        message.textContent = sent || noPhone || failed
-            ? `${sent} text(s) sent` +
-              (noPhone ? `, ${noPhone} borrower(s) have no mobile number` : "") +
+        message.textContent = sent || noEmail || failed
+            ? `${sent} email(s) sent` +
+              (noEmail ? `, ${noEmail} borrower(s) have no email` : "") +
               (failed ? `, ${failed} failed (they will be retried)` : "") + "."
-            : "No texts are waiting. Nothing is due, or everyone was already texted.";
+            : "No emails are waiting. Nothing is due, or everyone was already emailed.";
 
         await refreshData();
     } catch (err) {
         console.error(err);
         message.className = "message error";
         message.textContent =
-            "Could not send the texts. Check that the send-due-sms function is deployed and the SMS key is set.";
+            "Could not send the emails. Check that the send-due-email function is deployed and the Brevo key is set.";
     } finally {
         button.disabled = false;
     }

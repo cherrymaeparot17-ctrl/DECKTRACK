@@ -256,41 +256,39 @@ function showApp() {
     loadMyPhone();
 }
 
-function normalizePhone(value) {
-    let digits = String(value || "").replace(/[^\d]/g, "");
-    if (digits.startsWith("63") && digits.length === 12) digits = "0" + digits.slice(2);
-    if (digits.length === 10 && digits.startsWith("9")) digits = "0" + digits;
-    return /^09\d{9}$/.test(digits) ? digits : null;
+function normalizeEmail(value) {
+    const v = String(value || "").trim().toLowerCase();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? v : null;
 }
 
 async function loadMyPhone() {
     if (!me) return;
     const { data, error } = await db.from("students")
-        .select("phone").eq("id_number", me.id).maybeSingle();
+        .select("email").eq("id_number", me.id).maybeSingle();
     if (error) {
-        $("phoneBox").classList.add("hidden");   // phone column not set up yet
+        $("phoneBox").classList.add("hidden");   // email column not set up yet
         return;
     }
     $("phoneBox").classList.remove("hidden");
-    $("myPhone").value = (data && data.phone) || "";
+    $("myPhone").value = (data && data.email) || "";
 }
 
 $("savePhoneBtn").addEventListener("click", async () => {
     if (!me) return;
     const msg = $("phoneMessage");
-    const phone = normalizePhone($("myPhone").value);
-    if (!phone) {
-        msg.textContent = "Enter a valid Philippine mobile number, for example 09171234567.";
+    const email = normalizeEmail($("myPhone").value);
+    if (!email) {
+        msg.textContent = "Enter a valid email address, for example juan@gmail.com.";
         return;
     }
     const { data, error } = await db.from("students")
-        .update({ phone }).eq("id_number", me.id).select("id_number");
+        .update({ email }).eq("id_number", me.id).select("id_number");
     if (error || !data || !data.length) {
-        msg.textContent = "Could not save your number. Please tell the laboratory administrator.";
+        msg.textContent = "Could not save your email. Please tell the laboratory administrator.";
         return;
     }
-    $("myPhone").value = phone;
-    msg.textContent = "Saved. You will be texted when your equipment is due.";
+    $("myPhone").value = email;
+    msg.textContent = "Saved. You will be emailed when your equipment is due.";
 });
 
 $("logoutBtn").addEventListener("click", () => {
