@@ -6,6 +6,10 @@ const db = supabase.createClient(
 // ==========================================
 // DECKTRACK - JAVASCRIPT (Supabase version)
 // ==========================================
+// STUDENT PORTAL. Only people whose role is "student" can sign in here.
+// A student only ever sees and changes their OWN borrowings; equipment is
+// read-only. Adding equipment and checking everyone's records is done on
+// the separate Instructor Portal (instructor.html).
 // Login checks the "students" table. Equipment, borrowing, returns and
 // history are stored in the "items" and "borrows" tables.
 
@@ -49,6 +53,7 @@ const BORROW_SELECT = "*, students(name, role), items(name)";
 let equipment = [];
 let transactions = [];
 let loadErrorShown = false;
+let me = null;   // the signed-in student: { id, name }
 
 // The old demo data lived in the browser. It is no longer used.
 try {
@@ -82,7 +87,9 @@ function mapBorrow(row) {
 async function loadData() {
     const [itemsRes, borrowsRes] = await Promise.all([
         db.from("items").select("*").order("name"),
-        db.from("borrows").select(BORROW_SELECT).order("id", { ascending: true })
+        db.from("borrows").select(BORROW_SELECT)
+            .eq("student_id", me ? me.id : "")      // only this student's records
+            .order("id", { ascending: true })
     ]);
 
     if (itemsRes.error) throw itemsRes.error;
@@ -93,6 +100,7 @@ async function loadData() {
 }
 
 async function refreshData() {
+    if (!me) return;
     try {
         await loadData();
         loadErrorShown = false;
@@ -204,6 +212,12 @@ $("loginForm").addEventListener("submit", async function(event) {
             return;
         }
 
+        if (String(student.role || "").toLowerCase() !== "student") {
+            error.textContent =
+                "This portal is for students only. Instructors, please use the Instructor Portal.";
+            return;
+        }
+
         sessionStorage.setItem("deckLoggedIn", "true");
         sessionStorage.setItem("deckUserId", student.id_number);
         sessionStorage.setItem("deckUserName", student.name);
@@ -223,6 +237,11 @@ function showApp() {
 
     const userId = sessionStorage.getItem("deckUserId") || "CTU User";
     const userName = sessionStorage.getItem("deckUserName") || userId;
+    me = { id: userId, name: userName };
+    equipment = [];
+    transactions = [];
+    fillBorrower({ name: userName, role: "student" });
+    $("borrowerId").value = userId;
 
     $("currentUserLabel").textContent = userName;
     $("currentUserAvatar").textContent = userName.charAt(0).toUpperCase();
@@ -234,12 +253,53 @@ function showApp() {
 
     renderAll();
     refreshData();
+    loadMyPhone();
 }
+
+function normalizePhone(value) {
+    let digits = String(value || "").replace(/[^\d]/g, "");
+    if (digits.startsWith("63") && digits.length === 12) digits = "0" + digits.slice(2);
+    if (digits.length === 10 && digits.startsWith("9")) digits = "0" + digits;
+    return /^09\d{9}$/.test(digits) ? digits : null;
+}
+
+async function loadMyPhone() {
+    if (!me) return;
+    const { data, error } = await db.from("students")
+        .select("phone").eq("id_number", me.id).maybeSingle();
+    if (error) {
+        $("phoneBox").classList.add("hidden");   // phone column not set up yet
+        return;
+    }
+    $("phoneBox").classList.remove("hidden");
+    $("myPhone").value = (data && data.phone) || "";
+}
+
+$("savePhoneBtn").addEventListener("click", async () => {
+    if (!me) return;
+    const msg = $("phoneMessage");
+    const phone = normalizePhone($("myPhone").value);
+    if (!phone) {
+        msg.textContent = "Enter a valid Philippine mobile number, for example 09171234567.";
+        return;
+    }
+    const { data, error } = await db.from("students")
+        .update({ phone }).eq("id_number", me.id).select("id_number");
+    if (error || !data || !data.length) {
+        msg.textContent = "Could not save your number. Please tell the laboratory administrator.";
+        return;
+    }
+    $("myPhone").value = phone;
+    msg.textContent = "Saved. You will be texted when your equipment is due.";
+});
 
 $("logoutBtn").addEventListener("click", () => {
     sessionStorage.removeItem("deckLoggedIn");
     sessionStorage.removeItem("deckUserId");
     sessionStorage.removeItem("deckUserName");
+    me = null;
+    equipment = [];
+    transactions = [];
     $("mainApp").classList.add("hidden");
     $("loginPage").classList.remove("hidden");
     $("loginForm").reset();
@@ -255,7 +315,7 @@ const pageNames = {
     equipment: "Equipment Inventory",
     borrow: "Borrow Equipment",
     return: "Return Equipment",
-    history: "Transaction History"
+    history: "My History"
 };
 
 function openPage(pageId) {
@@ -331,6 +391,20 @@ function renderDashboard() {
     $("borrowedEquipment").textContent = borrowed;
     $("overdueEquipment").textContent = overdue;
 
+    const notice = $("dueNotice");
+    const dueToday = transactions.filter(t =>
+        t.status === "Borrowed" && t.dueDate === today());
+    const late = transactions.filter(isOverdue);
+    const parts = [];
+    if (late.length) parts.push(`${late.length} overdue item(s): ` +
+        late.map(t => escapeHTML(t.equipmentName)).join(", "));
+    if (dueToday.length) parts.push(`${dueToday.length} item(s) due today: ` +
+        dueToday.map(t => escapeHTML(t.equipmentName)).join(", "));
+    notice.innerHTML = parts.length
+        ? "&#9888; " + parts.join(" &middot; ") + ". Please return them to the laboratory."
+        : "";
+    notice.classList.toggle("hidden", !parts.length);
+
     const recent = [...transactions].reverse().slice(0, 5);
 
     $("recentTable").innerHTML = recent.length
@@ -373,117 +447,12 @@ function renderEquipment() {
                 <td>${statusBadge(
                     item.available > 0 ? "Available" : "Borrowed"
                 )}</td>
-                <td>
-                    <button class="small-btn delete-btn"
-                        data-delete="${escapeHTML(item.barcode)}">Delete</button>
-                </td>
             </tr>
         `).join("")
-        : emptyRow(7);
+        : emptyRow(6);
 }
 
 $("equipmentSearch").addEventListener("input", renderEquipment);
-
-$("showAddForm").addEventListener("click", () => {
-    $("addEquipmentPanel").classList.remove("hidden");
-    $("eqName").focus();
-});
-
-$("cancelAdd").addEventListener("click", () => {
-    $("addEquipmentPanel").classList.add("hidden");
-    $("equipmentForm").reset();
-});
-
-$("equipmentForm").addEventListener("submit", async event => {
-    event.preventDefault();
-
-    const name = $("eqName").value.trim();
-    const barcode = $("eqBarcode").value.trim();
-    const category = $("eqCategory").value.trim();
-    const quantity = Number($("eqQuantity").value);
-    const button = event.target.querySelector("button[type='submit']");
-
-    if (equipment.some(item =>
-        String(item.barcode).toLowerCase() === barcode.toLowerCase()
-    )) {
-        alert("This barcode is already registered.");
-        return;
-    }
-
-    if (quantity < 1 || !Number.isInteger(quantity)) {
-        alert("Enter a valid whole-number quantity.");
-        return;
-    }
-
-    button.disabled = true;
-
-    try {
-        const { error } = await db.from("items").insert({
-            barcode,
-            name,
-            category,
-            quantity,
-            available: quantity
-        });
-
-        if (error) {
-            alert(error.code === "23505"
-                ? "This barcode is already registered."
-                : "Could not save the equipment: " + error.message);
-            return;
-        }
-
-        $("equipmentForm").reset();
-        $("addEquipmentPanel").classList.add("hidden");
-        await refreshData();
-        alert("Equipment added successfully!");
-    } catch (err) {
-        console.error(err);
-        alert("Could not save the equipment: " + err.message);
-    } finally {
-        button.disabled = false;
-    }
-});
-
-$("equipmentTable").addEventListener("click", async event => {
-    const button = event.target.closest("[data-delete]");
-    if (!button) return;
-
-    const barcode = button.dataset.delete;
-    const item = equipment.find(eq => eq.barcode === barcode);
-
-    if (!item) return;
-
-    const hasActiveBorrow = transactions.some(t =>
-        t.barcode === item.barcode && t.status === "Borrowed"
-    );
-
-    if (hasActiveBorrow) {
-        alert("This equipment has active borrowing records and cannot be deleted.");
-        return;
-    }
-
-    if (!confirm(`Delete ${item.name} from the inventory?`)) return;
-
-    try {
-        const { error } = await db
-            .from("items")
-            .delete()
-            .eq("barcode", item.barcode);
-
-        if (error) {
-            alert(error.code === "23503"
-                ? "This equipment has borrowing history, so it cannot be deleted."
-                : "Could not delete the equipment: " + error.message);
-            return;
-        }
-
-        await refreshData();
-    } catch (err) {
-        console.error(err);
-        alert("Could not delete the equipment: " + err.message);
-    }
-});
 
 // ==========================================
 // BORROW EQUIPMENT
@@ -503,7 +472,7 @@ function renderBorrowed() {
                 <td>${statusBadge(transactionStatus(t))}</td>
             </tr>
         `).join("")
-        : emptyRow(6, "No equipment currently borrowed.");
+        : emptyRow(6, "You are not borrowing any equipment.");
 }
 
 function printBorrowReceipt(transaction) {
@@ -570,27 +539,6 @@ function fillBorrower(student) {
     $("borrowerRole").value = student ? capitalize(student.role) : "";
 }
 
-$("borrowerId").addEventListener("change", async () => {
-    const id = $("borrowerId").value.trim();
-    fillBorrower(null);
-
-    if (!id) return;
-
-    try {
-        const student = await findStudent(id);
-        fillBorrower(student);
-
-        if (!student) {
-            setBorrowMessage("ID number not registered.", "error");
-        } else {
-            setBorrowMessage("", "");
-        }
-    } catch (err) {
-        console.error(err);
-        setBorrowMessage("Could not check the ID number. Try again.", "error");
-    }
-});
-
 let lastBorrowedTransaction = null;
 let borrowBusy = false;
 
@@ -598,23 +546,20 @@ async function handleBorrow() {
     lastBorrowedTransaction = null;
     $("printReceiptBtn").classList.add("hidden");
 
-    const borrowerId = $("borrowerId").value.trim();
+    const borrowerId = me.id;   // always the signed-in student
     const barcode = $("borrowBarcode").value.trim();
     const quantity = Number($("borrowQuantity").value);
     const dueDate = $("dueDate").value;
 
     const student = await findStudent(borrowerId);
 
-    if (!student) {
-        fillBorrower(null);
+    if (!student || String(student.role || "").toLowerCase() !== "student") {
         setBorrowMessage(
-            "ID number not registered. Ask the laboratory administrator to add it first.",
+            "Your ID is no longer registered. Please see the laboratory administrator.",
             "error"
         );
         return;
     }
-
-    fillBorrower(student);
 
     const findItem = () => equipment.find(eq =>
         String(eq.barcode).toLowerCase() === barcode.toLowerCase()
@@ -690,7 +635,8 @@ async function handleBorrow() {
     lastBorrowedTransaction = transaction;
 
     $("borrowForm").reset();
-    fillBorrower(null);
+    fillBorrower({ name: me.name, role: "student" });
+    $("borrowerId").value = me.id;
     $("borrowQuantity").value = 1;
     $("borrowBarcode").focus();
 
@@ -747,7 +693,7 @@ function renderReturnTable() {
                 </td>
             </tr>
         `).join("")
-        : emptyRow(6, "No items waiting for return.");
+        : emptyRow(6, "You have no items waiting for return.");
 }
 
 function findReturnTransaction(barcode) {
@@ -875,7 +821,7 @@ function renderHistory() {
                 <td>${statusBadge(transactionStatus(t))}</td>
             </tr>
         `).join("")
-        : emptyRow(8, "No transaction records found.");
+        : emptyRow(8, "No records found.");
 }
 
 $("historySearch").addEventListener("input", renderHistory);
@@ -924,7 +870,7 @@ $("exportBtn").addEventListener("click", () => {
     const link = document.createElement("a");
 
     link.href = url;
-    link.download = "DECKTRACK_Transaction_History.csv";
+    link.download = "DECKTRACK_My_History.csv";
     link.click();
 
     URL.revokeObjectURL(url);

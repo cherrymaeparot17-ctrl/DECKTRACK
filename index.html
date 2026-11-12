@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DECKTRACK | Laboratory Management</title>
-    <meta name="description" content="Borrow and return tracking for the Computer Engineering Laboratory.">
+    <title>DECKTRACK | Student Portal</title>
+    <meta name="description" content="Student portal: borrow and return laboratory equipment and check your own borrowing records.">
 
     <!-- Installable app (PWA) -->
     <link rel="manifest" href="manifest.webmanifest">
@@ -32,6 +32,7 @@
                 <div class="login-brand-text">
                     <h1>DECK<span>TRACK</span></h1>
                     <div class="login-tag"><i></i><b>LABORATORY SYSTEM</b></div>
+                    <span class="portal-badge">STUDENT PORTAL</span>
                 </div>
             </div>
 
@@ -48,7 +49,8 @@
                     <button type="submit" class="primary-btn">Log In</button>
                     <p id="loginError" class="error"></p>
                 </form>
-                <small>For CTU Danao students and instructors</small>
+                <small>For CTU Danao students</small>
+                <a class="portal-link" href="instructor.html">Instructor? Open the Instructor Portal &rarr;</a>
             </div>
         </div>
 
@@ -74,7 +76,7 @@
                 <img class="brand-logo" src="icons/icon-192.png" alt="DECKTRACK">
                 <div>
                     <h2>DECKTRACK</h2>
-                    <small>Laboratory System</small>
+                    <small>Student Portal</small>
                 </div>
             </div>
 
@@ -93,7 +95,7 @@
                 <span>⇩</span> Return Equipment
             </button>
             <button class="nav-link" data-page="history">
-                <span>◷</span> Transaction History
+                <span>◷</span> My History
             </button>
 
             <div class="sidebar-bottom">
@@ -113,7 +115,7 @@
             <header class="topbar">
                 <div>
                     <h2 id="pageTitle">Dashboard</h2>
-                    <p>Computer Engineering Laboratory</p>
+                    <p>Student Portal &middot; Computer Engineering Laboratory</p>
                 </div>
                 <div class="topbar-right">
                     <span class="status-dot"></span>
@@ -127,17 +129,29 @@
                 <div class="welcome">
                     <div>
                         <h1>Welcome to DECKTRACK</h1>
-                        <p>Monitor and manage your laboratory equipment efficiently.</p>
+                        <p>Borrow, return and keep track of the laboratory equipment you use.</p>
                     </div>
                     <span id="currentDate"></span>
+                </div>
+
+                <div id="dueNotice" class="due-notice hidden"></div>
+
+                <div class="info-box" id="phoneBox">
+                    <strong>Text reminders</strong>
+                    <p>Add your mobile number so the laboratory can text you when borrowed equipment is due.</p>
+                    <div class="toolbar">
+                        <input id="myPhone" class="phone-input" type="tel" placeholder="09171234567" maxlength="16">
+                        <button id="savePhoneBtn" class="save-btn" type="button">Save number</button>
+                    </div>
+                    <p id="phoneMessage"></p>
                 </div>
 
                 <div class="stats-grid">
                     <div class="stat-card">
                         <div class="stat-icon blue">▤</div>
-                        <p>Total Equipment</p>
+                        <p>Lab Equipment</p>
                         <h2 id="totalEquipment">0</h2>
-                        <small>Registered equipment</small>
+                        <small>Registered in the lab</small>
                     </div>
                     <div class="stat-card">
                         <div class="stat-icon green">✓</div>
@@ -147,23 +161,23 @@
                     </div>
                     <div class="stat-card">
                         <div class="stat-icon orange">⇧</div>
-                        <p>Borrowed</p>
+                        <p>My Borrowed</p>
                         <h2 id="borrowedEquipment">0</h2>
-                        <small>Currently borrowed</small>
+                        <small>Currently with you</small>
                     </div>
                     <div class="stat-card">
                         <div class="stat-icon red">!</div>
-                        <p>Overdue</p>
+                        <p>My Overdue</p>
                         <h2 id="overdueEquipment">0</h2>
-                        <small>Past due date</small>
+                        <small>Please return these</small>
                     </div>
                 </div>
 
                 <div class="content-card">
                     <div class="card-heading">
                         <div>
-                            <h3>Recent Transactions</h3>
-                            <p>Latest equipment borrowing and returning activities</p>
+                            <h3>My Recent Transactions</h3>
+                            <p>Your latest borrowing and returning activity</p>
                         </div>
                         <button class="outline-btn" data-goto="history">View All</button>
                     </div>
@@ -188,36 +202,9 @@
             <section id="equipment" class="page">
                 <div class="section-heading">
                     <div>
-                        <h1>Equipment Inventory</h1>
-                        <p>Manage and monitor registered laboratory equipment.</p>
+                        <h1>Available Equipment</h1>
+                        <p>See what the laboratory has and what is free to borrow.</p>
                     </div>
-                    <button class="primary-btn" id="showAddForm">+ Add Equipment</button>
-                </div>
-
-                <div id="addEquipmentPanel" class="content-card hidden">
-                    <h3>Add New Equipment</h3>
-                    <form id="equipmentForm" class="form-grid">
-                        <div>
-                            <label>Equipment Name</label>
-                            <input id="eqName" required placeholder="e.g. Digital Multimeter">
-                        </div>
-                        <div>
-                            <label>Barcode Number</label>
-                            <input id="eqBarcode" required placeholder="Scan or enter barcode">
-                        </div>
-                        <div>
-                            <label>Category</label>
-                            <input id="eqCategory" required placeholder="e.g. Measuring Tool">
-                        </div>
-                        <div>
-                            <label>Quantity</label>
-                            <input id="eqQuantity" type="number" min="1" value="1" required>
-                        </div>
-                        <div class="form-actions">
-                            <button type="submit" class="primary-btn">Save Equipment</button>
-                            <button type="button" id="cancelAdd" class="outline-btn">Cancel</button>
-                        </div>
-                    </form>
                 </div>
 
                 <div class="content-card">
@@ -236,7 +223,6 @@
                                     <th>Quantity</th>
                                     <th>Available</th>
                                     <th>Status</th>
-                                    <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody id="equipmentTable"></tbody>
@@ -250,13 +236,13 @@
                 <div class="section-heading">
                     <div>
                         <h1>Borrow Equipment</h1>
-                        <p>Register borrowers and record equipment borrowing.</p>
+                        <p>Scan the equipment barcode to borrow it under your own ID.</p>
                     </div>
                 </div>
 
                 <div class="content-card form-card">
                     <h3>Borrowing Form</h3>
-                    <p class="muted">Fill in the borrower details and scan the equipment barcode.</p>
+                    <p class="muted">Your name and ID are filled in from your login. Scan the equipment barcode and pick a return date.</p>
 
                     <form id="borrowForm">
                         <div class="form-grid">
@@ -265,8 +251,8 @@
                                 <input id="borrowerName" readonly placeholder="Filled in from the ID number">
                             </div>
                             <div>
-                                <label>Student / Employee ID</label>
-                                <input id="borrowerId" required placeholder="ID number" autocomplete="off">
+                                <label>Student ID</label>
+                                <input id="borrowerId" required readonly placeholder="ID number" autocomplete="off">
                             </div>
                             <div>
                                 <label>Role</label>
@@ -306,7 +292,7 @@
                 </div>
 
                 <div class="content-card">
-                    <h3>Currently Borrowed Equipment</h3>
+                    <h3>Equipment You Are Borrowing</h3>
                     <div class="table-wrap">
                         <table>
                             <thead>
@@ -330,7 +316,7 @@
                 <div class="section-heading">
                     <div>
                         <h1>Return Equipment</h1>
-                        <p>Record returned equipment using its barcode.</p>
+                        <p>Return equipment you borrowed by scanning its barcode.</p>
                     </div>
                 </div>
 
@@ -347,7 +333,7 @@
                 </div>
 
                 <div class="content-card">
-                    <h3>Items for Return</h3>
+                    <h3>Your Items for Return</h3>
                     <div class="table-wrap">
                         <table>
                             <thead>
@@ -370,8 +356,8 @@
             <section id="history" class="page">
                 <div class="section-heading">
                     <div>
-                        <h1>Transaction History</h1>
-                        <p>Review all borrowing and returning records.</p>
+                        <h1>My History</h1>
+                        <p>Your own borrowing and returning records.</p>
                     </div>
                     <button class="outline-btn" id="exportBtn">↓ Export CSV</button>
                 </div>
@@ -379,7 +365,7 @@
                 <div class="content-card">
                     <div class="search-row">
                         <input type="search" id="historySearch"
-                               placeholder="Search transactions...">
+                               placeholder="Search your transactions...">
                     </div>
                     <div class="table-wrap">
                         <table>
@@ -402,7 +388,7 @@
             </section>
 
             <footer>
-                DECKTRACK © 2026 | Computer Engineering Laboratory
+                DECKTRACK © 2026 | Computer Engineering Laboratory | Student Portal
             </footer>
         </main>
     </div>
