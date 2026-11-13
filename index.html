@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DECKTRACK | Student Portal</title>
-    <meta name="description" content="Student portal: see laboratory equipment and check your own borrowing records. Borrowing and returning are done at the DECKTRACK device in the laboratory.">
+    <title>DECKTRACK | Student &amp; Instructor Portal</title>
+    <meta name="description" content="Student and instructor portal: see laboratory equipment and check your own borrowing records. Borrowing and returning are done at the DECKTRACK device in the laboratory.">
 
     <!-- Installable app (PWA) -->
     <link rel="manifest" href="manifest.webmanifest">
@@ -32,7 +32,7 @@
                 <div class="login-brand-text">
                     <h1>DECK<span>TRACK</span></h1>
                     <div class="login-tag"><i></i><b>LABORATORY SYSTEM</b></div>
-                    <span class="portal-badge">STUDENT PORTAL</span>
+                    <span class="portal-badge">STUDENT &amp; INSTRUCTOR PORTAL</span>
                 </div>
             </div>
 
@@ -49,8 +49,39 @@
                     <button type="submit" class="primary-btn">Log In</button>
                     <p id="loginError" class="error"></p>
                 </form>
-                <small>For CTU Danao students</small>
-                <a class="portal-link" href="instructor.html">Instructor? Open the Instructor Portal &rarr;</a>
+                <button type="button" id="showRegister" class="portal-link register-link">
+                    Not registered yet? Register here &rarr;
+                </button>
+
+                <form id="registerForm" class="hidden" autocomplete="off">
+                    <p class="register-note">Register once to borrow equipment. Use your real name and ID number.</p>
+                    <label for="regId">CTU ID Number</label>
+                    <input type="text" id="regId" placeholder="Your ID number" required>
+
+                    <label for="regName" style="margin-top:12px">Full Name</label>
+                    <input type="text" id="regName" placeholder="e.g. Juan Dela Cruz" required>
+
+                    <label for="regRole" style="margin-top:12px">I am a</label>
+                    <select id="regRole" required>
+                        <option value="Student">Student</option>
+                        <option value="Instructor">Instructor</option>
+                    </select>
+
+                    <div id="regSectionWrap">
+                        <label for="regSection" style="margin-top:12px">Section</label>
+                        <input type="text" id="regSection" placeholder="e.g. BSCpE 3A" maxlength="30">
+                    </div>
+
+                    <label for="regEmail" style="margin-top:12px">Email (for due reminders)</label>
+                    <input type="email" id="regEmail" placeholder="yourname@gmail.com">
+
+                    <button type="submit" class="primary-btn">Register and Log In</button>
+                    <p id="registerError" class="error"></p>
+                    <button type="button" id="hideRegister" class="portal-link register-link">&larr; Back to log in</button>
+                </form>
+
+                <small>For CTU Danao students and instructors</small>
+                <a class="portal-link" href="instructor.html">Laboratory In-Charge? Open the Lab In-Charge Portal &rarr;</a>
             </div>
         </div>
 
@@ -76,7 +107,7 @@
                 <img class="brand-logo" src="icons/icon-192.png" alt="DECKTRACK">
                 <div>
                     <h2>DECKTRACK</h2>
-                    <small>Student Portal</small>
+                    <small>Student &amp; Instructor</small>
                 </div>
             </div>
 
@@ -109,7 +140,7 @@
             <header class="topbar">
                 <div>
                     <h2 id="pageTitle">Dashboard</h2>
-                    <p>Student Portal &middot; Computer Engineering Laboratory</p>
+                    <p>Student &amp; Instructor Portal &middot; Computer Engineering Laboratory</p>
                 </div>
                 <div class="topbar-right">
                     <span class="status-dot"></span>
@@ -263,7 +294,7 @@
             </section>
 
             <footer>
-                DECKTRACK © 2026 | Computer Engineering Laboratory | Student Portal
+                DECKTRACK © 2026 | Computer Engineering Laboratory | Student &amp; Instructor Portal
             </footer>
         </main>
     </div>

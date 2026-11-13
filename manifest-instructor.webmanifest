@@ -1,7 +1,7 @@
 {
-  "name": "DECKTRACK | Instructor Portal",
-  "short_name": "DECKTRACK Instructor",
-  "description": "Instructor portal: equipment, transactions and due-date email reminders for the Computer Engineering Laboratory.",
+  "name": "DECKTRACK | Lab In-Charge Portal",
+  "short_name": "DECKTRACK Lab In-Charge",
+  "description": "Lab In-Charge portal: equipment, transactions and due-date email reminders for the Computer Engineering Laboratory.",
   "id": "./instructor.html",
   "start_url": "./instructor.html",
   "scope": "./",

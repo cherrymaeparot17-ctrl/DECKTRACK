@@ -4,11 +4,10 @@ const db = supabase.createClient(
 );
 
 // ==========================================
-// DECKTRACK - INSTRUCTOR PORTAL
+// DECKTRACK - LAB IN-CHARGE PORTAL
 // ==========================================
-// For instructors only. Instructors sign in with their ID number and a PIN
-// (checked by the "instructor_login" function in Supabase, see
-// supabase_setup.sql). From here they can:
+// For the Laboratory In-Charge only. They sign in with their ID number
+// (their role in the "students" table must be Lab In-Charge). From here they can:
 //   - check every transaction and all equipment
 //   - add or delete equipment
 //   - save students' emails and send the due-date email reminders
@@ -175,52 +174,53 @@ function smsTag(t) {
 }
 
 // ==========================================
-// LOGIN AND LOGOUT (instructors only)
+// LOGIN AND LOGOUT (Laboratory In-Charge only)
 // ==========================================
 
 $("loginForm").addEventListener("submit", async function(event) {
     event.preventDefault();
 
     const userId = $("userId").value.trim();
-    const pin = $("userPin").value;
     const error = $("loginError");
     const button = this.querySelector("button[type='submit']");
 
     error.textContent = "";
 
-    if (!userId || !pin) {
-        error.textContent = "Please enter your instructor ID and PIN.";
+    if (!userId) {
+        error.textContent = "Please enter your ID number.";
         return;
     }
 
     button.disabled = true;
 
     try {
-        const { data, error: rpcError } = await db.rpc("instructor_login", {
-            p_id: userId,
-            p_pin: pin
-        });
+        const { data: person, error: dbError } = await db
+            .from("students")
+            .select("id_number, name, role")
+            .eq("id_number", userId)
+            .maybeSingle();
 
-        if (rpcError) {
-            console.error("Instructor login failed:", rpcError);
-            error.textContent = rpcError.code === "PGRST202"
-                ? "Instructor sign-in is not set up yet. Run supabase_setup.sql in Supabase first."
-                : "Could not reach the database. Check your internet connection and try again.";
+        if (dbError) {
+            console.error("Lab In-Charge login failed:", dbError);
+            error.textContent =
+                "Could not reach the database. Check your internet connection and try again.";
             return;
         }
 
-        const person = Array.isArray(data) ? data[0] : data;
+        // The role may be typed a few ways: "Lab In-Charge", "Laboratory Incharge", ...
+        const roleKey = String(person?.role || "").toLowerCase().replace(/[^a-z]/g, "");
+        const isInCharge = ["labincharge", "laboratoryincharge", "incharge", "admin"]
+            .includes(roleKey);
 
-        if (!person) {
+        if (!person || !isInCharge) {
             error.textContent =
-                "Wrong ID or PIN, or this ID is not registered as an instructor.";
+                "This ID is not registered as Laboratory In-Charge.";
             return;
         }
 
         sessionStorage.setItem("deckInstLoggedIn", "true");
         sessionStorage.setItem("deckInstId", person.id_number);
         sessionStorage.setItem("deckInstName", person.name);
-        $("userPin").value = "";
         showApp();
     } catch (err) {
         console.error("Login check failed:", err);
@@ -236,7 +236,7 @@ function showApp() {
     $("mainApp").classList.remove("hidden");
 
     const name = sessionStorage.getItem("deckInstName") ||
-        sessionStorage.getItem("deckInstId") || "Instructor";
+        sessionStorage.getItem("deckInstId") || "Lab In-Charge";
 
     $("currentUserLabel").textContent = name;
     $("currentUserAvatar").textContent = name.charAt(0).toUpperCase();
@@ -677,7 +677,7 @@ $("studentTable").addEventListener("click", async event => {
 
         if (error) throw error;
         if (!data || !data.length) {
-            alert("The number was not saved. The database may not allow instructors to update students yet.");
+            alert("The number was not saved. The database may not allow the Lab In-Charge to update students yet.");
             return;
         }
 

@@ -6,10 +6,10 @@ const db = supabase.createClient(
 // ==========================================
 // DECKTRACK - JAVASCRIPT (Supabase version)
 // ==========================================
-// STUDENT PORTAL. Only people whose role is "student" can sign in here.
-// A student only ever sees and changes their OWN borrowings; equipment is
+// BORROWER PORTAL (students and instructors). Only people whose role is
+// "student" or "instructor" can sign in here. A borrower only ever sees and changes their OWN borrowings; equipment is
 // read-only. Adding equipment and checking everyone's records is done on
-// the separate Instructor Portal (instructor.html).
+// the separate Lab In-Charge Portal (instructor.html).
 // Borrowing and returning are NOT done on this website: they are done on the
 // DECKTRACK hardware device. This site only shows equipment and the
 // student's own history.
@@ -185,13 +185,14 @@ $("loginForm").addEventListener("submit", async function(event) {
 
         if (!student) {
             error.textContent =
-                "ID number not registered. Please see the laboratory administrator.";
+                "ID number not registered yet. Tap \"Register here\" below to register first.";
             return;
         }
 
-        if (String(student.role || "").toLowerCase() !== "student") {
+        const role = String(student.role || "").toLowerCase();
+        if (role !== "student" && role !== "instructor") {
             error.textContent =
-                "This portal is for students only. Instructors, please use the Instructor Portal.";
+                "This portal is for students and instructors. Laboratory In-Charge, please use the Lab In-Charge Portal.";
             return;
         }
 
@@ -201,6 +202,110 @@ $("loginForm").addEventListener("submit", async function(event) {
         showApp();
     } catch (err) {
         console.error("Login check failed:", err);
+        error.textContent =
+            "Could not reach the database. Check your internet connection and try again.";
+    } finally {
+        button.disabled = false;
+    }
+});
+
+// ==========================================
+// REGISTRATION (people who are not in the database yet)
+// ==========================================
+
+function showLoginMode(register) {
+    $("loginForm").classList.toggle("hidden", register);
+    $("showRegister").classList.toggle("hidden", register);
+    $("registerForm").classList.toggle("hidden", !register);
+    $("loginError").textContent = "";
+    $("registerError").textContent = "";
+}
+
+// The section box is only for students.
+function updateSectionBox() {
+    const isStudent = $("regRole").value !== "Instructor";
+    $("regSectionWrap").classList.toggle("hidden", !isStudent);
+    $("regSection").required = isStudent;
+}
+$("regRole").addEventListener("change", updateSectionBox);
+updateSectionBox();
+
+$("showRegister").addEventListener("click", () => showLoginMode(true));
+$("hideRegister").addEventListener("click", () => showLoginMode(false));
+
+$("registerForm").addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    const error = $("registerError");
+    const button = this.querySelector("button[type='submit']");
+    const id = $("regId").value.trim();
+    const name = $("regName").value.trim().replace(/\s+/g, " ");
+    const role = $("regRole").value === "Instructor" ? "Instructor" : "Student";
+    const section = $("regSection").value.trim().replace(/\s+/g, " ");
+    const emailRaw = $("regEmail").value.trim();
+    const email = emailRaw ? normalizeEmail(emailRaw) : null;
+
+    error.textContent = "";
+
+    if (!/^[A-Za-z0-9-]{4,20}$/.test(id)) {
+        error.textContent = "Enter your ID number (letters, numbers and dashes only).";
+        return;
+    }
+    if (name.length < 3) {
+        error.textContent = "Please enter your full name.";
+        return;
+    }
+    if (role === "Student" && section.length < 2) {
+        error.textContent = "Please enter your section, for example BSCpE 3A.";
+        return;
+    }
+    if (emailRaw && !email) {
+        error.textContent = "That email address does not look right.";
+        return;
+    }
+
+    button.disabled = true;
+
+    try {
+        const existing = await findStudent(id);
+        if (existing) {
+            error.textContent =
+                "This ID number is already registered. Go back and log in.";
+            return;
+        }
+
+        const row = { id_number: id, name, role };
+        if (email) row.email = email;
+        if (role === "Student") row.section = section;
+
+        let { error: insertError } = await db.from("students").insert(row);
+
+        // A column is missing (for example "email" before the setup SQL was run):
+        // drop that field and register with the rest.
+        for (const col of ["email", "section"]) {
+            if (insertError && col in row && new RegExp(col).test(insertError.message || "")) {
+                delete row[col];
+                ({ error: insertError } = await db.from("students").insert(row));
+            }
+        }
+
+        if (insertError) {
+            console.error("Registration failed:", insertError);
+            error.textContent = insertError.code === "23505"
+                ? "This ID number is already registered. Go back and log in."
+                : "Could not register right now. Please see the laboratory administrator.";
+            return;
+        }
+
+        sessionStorage.setItem("deckLoggedIn", "true");
+        sessionStorage.setItem("deckUserId", id);
+        sessionStorage.setItem("deckUserName", name);
+        this.reset();
+        updateSectionBox();
+        showLoginMode(false);
+        showApp();
+    } catch (err) {
+        console.error("Registration check failed:", err);
         error.textContent =
             "Could not reach the database. Check your internet connection and try again.";
     } finally {

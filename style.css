@@ -1537,3 +1537,14 @@ footer {
     border: 1px solid rgba(140, 170, 255, .25);
 }
 .sms-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 14px; }
+
+
+/* REGISTRATION (borrower portal login card) */
+.register-link {
+    display: block; width: 100%; margin-top: 12px; padding: 4px 0;
+    background: none; border: 0; cursor: pointer; text-align: center; font: inherit;
+}
+.register-note { margin: 0 0 12px; font-size: .9rem; opacity: .85; }
+.login-card select option { color: #14213d; background: #fff; }
+#registerForm { margin-top: 4px; }
+.login-card select { background: rgba(8, 14, 44, .6); color: #fff; }

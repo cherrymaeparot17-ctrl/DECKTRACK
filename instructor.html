@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DECKTRACK | Instructor Portal</title>
-    <meta name="description" content="Instructor portal: check equipment and transactions, add equipment and manage due-date email reminders.">
+    <title>DECKTRACK | Lab In-Charge Portal</title>
+    <meta name="description" content="Lab In-Charge portal: check equipment and transactions, add equipment and manage due-date email reminders.">
 
     <!-- Installable app (PWA) -->
     <link rel="manifest" href="manifest-instructor.webmanifest">
@@ -13,7 +13,7 @@
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-title" content="DECKTRACK Instructor">
+    <meta name="apple-mobile-web-app-title" content="DECKTRACK Lab In-Charge">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
@@ -32,29 +32,25 @@
                 <div class="login-brand-text">
                     <h1>DECK<span>TRACK</span></h1>
                     <div class="login-tag"><i></i><b>LABORATORY SYSTEM</b></div>
-                    <span class="portal-badge">INSTRUCTOR PORTAL</span>
+                    <span class="portal-badge">LAB IN-CHARGE PORTAL</span>
                 </div>
             </div>
 
             <!-- Login box -->
             <div class="login-card">
                 <p>Equipment and transaction<br>
-                   monitoring for instructors</p>
+                   monitoring for the Laboratory In-Charge</p>
 
                 <form id="loginForm">
-                    <label for="userId">Instructor ID Number</label>
+                    <label for="userId">Lab In-Charge ID Number</label>
                     <input type="text" id="userId" name="userId"
-                        placeholder="Enter your instructor ID" autocomplete="username" required>
-
-                    <label for="userPin" style="margin-top:14px">PIN</label>
-                    <input type="password" id="userPin" name="userPin"
-                        placeholder="Enter your PIN" autocomplete="current-password" required>
+                        placeholder="Enter your ID number" autocomplete="username" required>
 
                     <button type="submit" class="primary-btn">Log In</button>
                     <p id="loginError" class="error"></p>
                 </form>
-                <small>For CTU Danao instructors only</small>
-                <a class="portal-link" href="index.html">Student? Open the Student Portal &rarr;</a>
+                <small>For the CTU Danao Laboratory In-Charge only</small>
+                <a class="portal-link" href="index.html">Student or instructor? Open the Borrower Portal &rarr;</a>
             </div>
         </div>
 
@@ -80,11 +76,11 @@
                 <img class="brand-logo" src="icons/icon-192.png" alt="DECKTRACK">
                 <div>
                     <h2>DECKTRACK</h2>
-                    <small>Instructor Portal</small>
+                    <small>Lab In-Charge Portal</small>
                 </div>
             </div>
 
-            <div class="nav-label">INSTRUCTOR MENU</div>
+            <div class="nav-label">LAB IN-CHARGE MENU</div>
 
             <button class="nav-link active" data-page="dashboard">
                 <span>▦</span> Dashboard
@@ -103,7 +99,7 @@
                 <div class="user-mini">
                     <div class="avatar" id="currentUserAvatar">I</div>
                     <div>
-                        <strong id="currentUserLabel">Instructor</strong>
+                        <strong id="currentUserLabel">Lab In-Charge</strong>
                         <small>CTU Danao</small>
                     </div>
                 </div>
@@ -116,7 +112,7 @@
             <header class="topbar">
                 <div>
                     <h2 id="pageTitle">Dashboard</h2>
-                    <p>Instructor Portal &middot; Computer Engineering Laboratory</p>
+                    <p>Lab In-Charge Portal &middot; Computer Engineering Laboratory</p>
                 </div>
                 <div class="topbar-right">
                     <span class="status-dot"></span>
@@ -364,7 +360,7 @@
             </section>
 
             <footer>
-                DECKTRACK © 2026 | Computer Engineering Laboratory | Instructor Portal
+                DECKTRACK © 2026 | Computer Engineering Laboratory | Lab In-Charge Portal
             </footer>
         </main>
     </div>

@@ -1,11 +1,11 @@
-// DECKTRACK service worker (serves both the Student Portal and the Instructor Portal)
+// DECKTRACK service worker (serves both the Borrower Portal and the Lab In-Charge Portal)
 // - Makes the site installable.
 // - Keeps a copy of the app shell (page, styles, script, icons) and of the
 //   Supabase library file, so the window still opens when the connection drops.
 // - Never caches database traffic: borrow/return data always comes live
 //   from Supabase so records are never stale.
 
-const CACHE = "decktrack-shell-v4";
+const CACHE = "decktrack-shell-v5";
 
 const SHELL = [
     "./",
