@@ -10,8 +10,11 @@ const db = supabase.createClient(
 // A student only ever sees and changes their OWN borrowings; equipment is
 // read-only. Adding equipment and checking everyone's records is done on
 // the separate Instructor Portal (instructor.html).
-// Login checks the "students" table. Equipment, borrowing, returns and
-// history are stored in the "items" and "borrows" tables.
+// Borrowing and returning are NOT done on this website: they are done on the
+// DECKTRACK hardware device. This site only shows equipment and the
+// student's own history.
+// Login checks the "students" table. Equipment, borrowing and history are
+// stored in the "items" and "borrows" tables.
 
 const $ = id => document.getElementById(id);
 
@@ -38,19 +41,6 @@ const escapeHTML = value => String(value ?? "").replace(
 const dateText = value => value
     ? new Date(value + "T00:00:00").toLocaleDateString()
     : "—";
-
-// Date and time in Philippine time, as {date: "YYYY-MM-DD", time: "HH:MM"}.
-function manilaParts(d) {
-    const parts = new Intl.DateTimeFormat("en-CA", {
-        timeZone: "Asia/Manila", year: "numeric", month: "2-digit",
-        day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23"
-    }).formatToParts(d);
-    const get = type => parts.find(p => p.type === type).value;
-    return {
-        date: `${get("year")}-${get("month")}-${get("day")}`,
-        time: `${get("hour")}:${get("minute")}`
-    };
-}
 
 // "Nov 12, 2026, 5:00 PM" when the exact time is known, otherwise just the date.
 const dueText = t => t.dueAt
@@ -148,42 +138,6 @@ async function findStudent(id) {
     return data;
 }
 
-// Changes the "available" count of an item by +delta or -delta.
-// It only writes if nobody else changed the count in the meantime,
-// and retries a few times if someone did.
-async function adjustAvailable(barcode, delta) {
-    for (let attempt = 0; attempt < 4; attempt++) {
-        const { data: item, error } = await db
-            .from("items")
-            .select("quantity, available")
-            .eq("barcode", barcode)
-            .maybeSingle();
-
-        if (error) throw error;
-        if (!item) return { ok: false, reason: "notfound" };
-
-        const next = item.available + delta;
-
-        if (next < 0) {
-            return { ok: false, reason: "stock", available: item.available };
-        }
-
-        const capped = Math.min(next, item.quantity);
-
-        const { data: rows, error: updateError } = await db
-            .from("items")
-            .update({ available: capped })
-            .eq("barcode", barcode)
-            .eq("available", item.available)
-            .select("available");
-
-        if (updateError) throw updateError;
-        if (rows && rows.length) return { ok: true, available: rows[0].available };
-    }
-
-    return { ok: false, reason: "busy" };
-}
-
 function isOverdue(transaction) {
     if (transaction.status !== "Borrowed") return false;
     if (transaction.dueAt) return Date.now() > new Date(transaction.dueAt).getTime();
@@ -263,8 +217,6 @@ function showApp() {
     me = { id: userId, name: userName };
     equipment = [];
     transactions = [];
-    fillBorrower({ name: userName, role: "student" });
-    $("borrowerId").value = userId;
 
     $("currentUserLabel").textContent = userName;
     $("currentUserAvatar").textContent = userName.charAt(0).toUpperCase();
@@ -314,14 +266,6 @@ $("savePhoneBtn").addEventListener("click", async () => {
     msg.textContent = "Saved. You will be emailed when your equipment is due.";
 });
 
-$("dueQuick").addEventListener("change", () => {
-    const hours = Number($("dueQuick").value);
-    if (!hours) return;
-    const parts = manilaParts(new Date(Date.now() + hours * 3600000));
-    $("dueDate").value = parts.date;
-    $("dueTime").value = parts.time;
-});
-
 $("logoutBtn").addEventListener("click", () => {
     sessionStorage.removeItem("deckLoggedIn");
     sessionStorage.removeItem("deckUserId");
@@ -342,8 +286,6 @@ $("logoutBtn").addEventListener("click", () => {
 const pageNames = {
     dashboard: "Dashboard",
     equipment: "Equipment Inventory",
-    borrow: "Borrow Equipment",
-    return: "Return Equipment",
     history: "My History"
 };
 
@@ -369,10 +311,6 @@ function openPage(pageId) {
     // Show what we have right away, then fetch the latest from the database.
     renderAll();
     refreshData();
-
-    if (pageId === "borrow") {
-        $("borrowBarcode").focus();
-    }
 }
 
 document.querySelectorAll(".nav-link").forEach(button => {
@@ -385,13 +323,6 @@ document.querySelectorAll("[data-goto]").forEach(button => {
     button.addEventListener("click", () => {
         openPage(button.dataset.goto);
     });
-});
-
-$("borrowBarcode").addEventListener("keydown", event => {
-    if (event.key === "Enter") {
-        event.preventDefault();
-        $("borrowForm").requestSubmit();
-    }
 });
 
 // ==========================================
@@ -484,360 +415,6 @@ function renderEquipment() {
 $("equipmentSearch").addEventListener("input", renderEquipment);
 
 // ==========================================
-// BORROW EQUIPMENT
-// ==========================================
-
-function renderBorrowed() {
-    const active = transactions.filter(t => t.status === "Borrowed");
-
-    $("borrowedTable").innerHTML = active.length
-        ? [...active].reverse().map(t => `
-            <tr>
-                <td><strong>${escapeHTML(t.borrower)}</strong></td>
-                <td>${escapeHTML(t.equipmentName)}</td>
-                <td>${escapeHTML(t.barcode)}</td>
-                <td>${t.quantity}</td>
-                <td>${dueText(t)}</td>
-                <td>${statusBadge(transactionStatus(t))}</td>
-            </tr>
-        `).join("")
-        : emptyRow(6, "You are not borrowing any equipment.");
-}
-
-function printBorrowReceipt(transaction) {
-    $("printReceipt").innerHTML = `
-        <header class="receipt-header">
-            <h1>DECKTRACK</h1>
-            <p>Computer Engineering Laboratory</p>
-            <strong>EQUIPMENT BORROWING RECEIPT</strong>
-        </header>
-        <div class="receipt-row">
-            <span>Receipt No.</span>
-            <strong>DT-${String(transaction.id).padStart(5, "0")}</strong>
-        </div>
-        <div class="receipt-row">
-            <span>Date / Time</span>
-            <span>${escapeHTML(transaction.borrowedAt)}</span>
-        </div>
-        <hr>
-        <div class="receipt-row">
-            <span>Borrower</span>
-            <strong>${escapeHTML(transaction.borrower)}</strong>
-        </div>
-        <div class="receipt-row">
-            <span>ID Number</span>
-            <span>${escapeHTML(transaction.borrowerId)}</span>
-        </div>
-        <div class="receipt-row">
-            <span>Role</span>
-            <span>${escapeHTML(transaction.role)}</span>
-        </div>
-        <hr>
-        <p class="receipt-item-label">EQUIPMENT</p>
-        <p class="receipt-item-name">${escapeHTML(transaction.equipmentName)}</p>
-        <div class="receipt-row">
-            <span>Barcode</span>
-            <span>${escapeHTML(transaction.barcode)}</span>
-        </div>
-        <div class="receipt-row">
-            <span>Quantity</span>
-            <span>${transaction.quantity}</span>
-        </div>
-        <div class="receipt-row receipt-due">
-            <strong>Return By</strong>
-            <strong>${escapeHTML(dueText(transaction))}</strong>
-        </div>
-        <p class="receipt-note">Please return the equipment on or before the due date. Keep this receipt for your records.</p>
-        <div class="receipt-signature">Borrower's Signature</div>
-        <footer>Thank you for taking care of our laboratory equipment.</footer>
-    `;
-
-    window.print();
-}
-
-function setBorrowMessage(text, type) {
-    const message = $("borrowMessage");
-    message.className = "message";
-    message.textContent = text;
-    if (type) message.classList.add(type);
-}
-
-// Fills the name and role fields from the students table.
-function fillBorrower(student) {
-    $("borrowerName").value = student ? student.name : "";
-    $("borrowerRole").value = student ? capitalize(student.role) : "";
-}
-
-let lastBorrowedTransaction = null;
-let borrowBusy = false;
-
-async function handleBorrow() {
-    lastBorrowedTransaction = null;
-    $("printReceiptBtn").classList.add("hidden");
-
-    const borrowerId = me.id;   // always the signed-in student
-    const barcode = $("borrowBarcode").value.trim();
-    const quantity = Number($("borrowQuantity").value);
-    const dueDate = $("dueDate").value;
-    const dueTime = $("dueTime").value;
-    const dueAt = new Date(`${dueDate}T${dueTime || "00:00"}:00+08:00`);
-
-    const student = await findStudent(borrowerId);
-
-    if (!student || String(student.role || "").toLowerCase() !== "student") {
-        setBorrowMessage(
-            "Your ID is no longer registered. Please see the laboratory administrator.",
-            "error"
-        );
-        return;
-    }
-
-    const findItem = () => equipment.find(eq =>
-        String(eq.barcode).toLowerCase() === barcode.toLowerCase()
-    );
-
-    let item = findItem();
-
-    if (!item) {
-        await refreshData();
-        item = findItem();
-    }
-
-    if (!item) {
-        setBorrowMessage("Equipment barcode not found.", "error");
-        return;
-    }
-
-    if (!Number.isInteger(quantity) || quantity < 1) {
-        setBorrowMessage("Enter a valid quantity.", "error");
-        return;
-    }
-
-    if (!dueDate || !dueTime || isNaN(dueAt.getTime()) || dueAt.getTime() <= Date.now()) {
-        setBorrowMessage("Please choose a return date and time that is later than now.", "error");
-        return;
-    }
-
-    // Take the items out of stock first.
-    const stock = await adjustAvailable(item.barcode, -quantity);
-
-    if (!stock.ok) {
-        if (stock.reason === "stock") {
-            setBorrowMessage(
-                `Only ${stock.available} item(s) are currently available.`,
-                "error"
-            );
-        } else if (stock.reason === "busy") {
-            setBorrowMessage(
-                "The equipment record is busy. Please try again.",
-                "error"
-            );
-        } else {
-            setBorrowMessage("Equipment barcode not found.", "error");
-        }
-        await refreshData();
-        return;
-    }
-
-    // Then record the borrowing. If that fails, put the stock back.
-    const insertBorrow = payload => db
-        .from("borrows")
-        .insert(payload)
-        .select(BORROW_SELECT)
-        .single();
-
-    const basePayload = {
-        student_id: student.id_number,
-        item_barcode: item.barcode,
-        quantity,
-        due_date: dueDate
-    };
-
-    let { data, error } = await insertBorrow({
-        ...basePayload, due_at: dueAt.toISOString()
-    });
-
-    // The new "due_at" column is missing (supabase_setup.sql not run yet):
-    // still record the borrowing, with the date only.
-    if (error && /due_at/.test(error.message || "")) {
-        ({ data, error } = await insertBorrow(basePayload));
-    }
-
-    if (error) {
-        console.error(error);
-        await adjustAvailable(item.barcode, quantity);
-        setBorrowMessage(
-            "Could not record the borrowing: " + error.message,
-            "error"
-        );
-        await refreshData();
-        return;
-    }
-
-    const transaction = mapBorrow(data);
-    lastBorrowedTransaction = transaction;
-
-    $("borrowForm").reset();
-    fillBorrower({ name: me.name, role: "student" });
-    $("borrowerId").value = me.id;
-    $("borrowQuantity").value = 1;
-    $("borrowBarcode").focus();
-
-    setBorrowMessage(
-        `Borrowing recorded successfully for ${transaction.borrower}. Print the receipt below.`,
-        "success"
-    );
-    $("printReceiptBtn").classList.remove("hidden");
-
-    await refreshData();
-}
-
-$("borrowForm").addEventListener("submit", async event => {
-    event.preventDefault();
-
-    if (borrowBusy) return;
-    borrowBusy = true;
-
-    try {
-        await handleBorrow();
-    } catch (err) {
-        console.error(err);
-        setBorrowMessage("Something went wrong: " + err.message, "error");
-    } finally {
-        borrowBusy = false;
-    }
-});
-
-$("printReceiptBtn").addEventListener("click", () => {
-    if (lastBorrowedTransaction) {
-        printBorrowReceipt(lastBorrowedTransaction);
-    }
-});
-
-
-// ==========================================
-// RETURN EQUIPMENT
-// ==========================================
-
-function renderReturnTable() {
-    const active = transactions.filter(t => t.status === "Borrowed");
-
-    $("returnTable").innerHTML = active.length
-        ? [...active].reverse().map(t => `
-            <tr>
-                <td>${escapeHTML(t.borrower)}</td>
-                <td>${escapeHTML(t.equipmentName)}</td>
-                <td>${escapeHTML(t.barcode)}</td>
-                <td>${escapeHTML(t.borrowedAt)}</td>
-                <td>${dueText(t)}</td>
-                <td>
-                    <button class="small-btn return-btn"
-                        data-return="${t.id}">Return</button>
-                </td>
-            </tr>
-        `).join("")
-        : emptyRow(6, "You have no items waiting for return.");
-}
-
-function findReturnTransaction(barcode) {
-    return transactions.find(t =>
-        String(t.barcode).toLowerCase() === barcode.toLowerCase() &&
-        t.status === "Borrowed"
-    );
-}
-
-async function processReturn(transaction) {
-    if (!transaction || transaction.status !== "Borrowed") return;
-
-    if (!confirm(
-        `Confirm return of ${transaction.equipmentName} from ${transaction.borrower}?`
-    )) return;
-
-    try {
-        // Mark the borrowing as returned (only if it is still open).
-        const { data: updated, error } = await db
-            .from("borrows")
-            .update({ returned_at: new Date().toISOString() })
-            .eq("id", transaction.id)
-            .is("returned_at", null)
-            .select("id");
-
-        if (error) throw error;
-
-        if (!updated || !updated.length) {
-            alert("This item was already returned.");
-            await refreshData();
-            return;
-        }
-
-        // Put the items back in stock.
-        const stock = await adjustAvailable(
-            transaction.barcode,
-            transaction.quantity
-        );
-
-        if (!stock.ok && stock.reason === "notfound") {
-            alert("Equipment record not found, but the return was saved.");
-        }
-
-        $("returnResult").innerHTML =
-            `<div class="result-box">Equipment returned successfully.</div>`;
-        await refreshData();
-    } catch (err) {
-        console.error(err);
-        alert("Could not save the return: " + err.message);
-    }
-}
-
-$("returnForm").addEventListener("submit", async event => {
-    event.preventDefault();
-
-    const barcode = $("returnBarcode").value.trim();
-    const result = $("returnResult");
-
-    await refreshData();
-
-    const transaction = findReturnTransaction(barcode);
-
-    if (!transaction) {
-        result.innerHTML =
-            `<div class="result-box">No active borrowing record found for this barcode.</div>`;
-        return;
-    }
-
-    result.innerHTML = `
-        <div class="result-box">
-            <strong>Borrowing Record Found</strong><br>
-            Borrower: ${escapeHTML(transaction.borrower)}<br>
-            ID Number: ${escapeHTML(transaction.borrowerId)}<br>
-            Equipment: ${escapeHTML(transaction.equipmentName)}<br>
-            Barcode: ${escapeHTML(transaction.barcode)}<br>
-            Quantity: ${transaction.quantity}<br>
-            Due: ${dueText(transaction)}<br>
-            Status: ${escapeHTML(transactionStatus(transaction))}<br>
-            <button class="primary-btn" id="confirmReturn">
-                Confirm Return
-            </button>
-        </div>
-    `;
-
-    $("confirmReturn").addEventListener("click", () => {
-        processReturn(transaction);
-    });
-});
-
-$("returnTable").addEventListener("click", event => {
-    const button = event.target.closest("[data-return]");
-    if (!button) return;
-
-    const transaction = transactions.find(t =>
-        t.id === Number(button.dataset.return)
-    );
-
-    processReturn(transaction);
-});
-
-// ==========================================
 // TRANSACTION HISTORY
 // ==========================================
 
@@ -926,8 +503,6 @@ $("exportBtn").addEventListener("click", () => {
 function renderAll() {
     renderDashboard();
     renderEquipment();
-    renderBorrowed();
-    renderReturnTable();
     renderHistory();
 }
 
