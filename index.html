@@ -161,15 +161,43 @@
 
                 <div id="dueNotice" class="due-notice hidden"></div>
 
-                <div class="info-box" id="phoneBox">
-                    <strong>Email reminders</strong>
-                    <p>Add your email so the laboratory can remind you when borrowed equipment is due.</p>
-                    <div class="toolbar">
-                        <input id="myPhone" class="phone-input" type="email" placeholder="yourname@gmail.com" maxlength="100">
-                        <button id="savePhoneBtn" class="save-btn" type="button">Save email</button>
+                <section class="email-card needs-email" id="phoneBox" aria-labelledby="emailTitle">
+                    <div class="email-card-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="5" width="18" height="14" rx="3"></rect>
+                            <path d="m4 8 8 6 8-6"></path>
+                        </svg>
+                        <span class="email-card-check" aria-hidden="true">&#10003;</span>
                     </div>
-                    <p id="phoneMessage"></p>
-                </div>
+
+                    <div class="email-card-body">
+                        <span class="email-card-tag" id="emailTag">Action needed</span>
+                        <h3 id="emailTitle">Turn on your email reminders</h3>
+                        <p id="emailText">Get an email when your borrowed equipment is due, and a follow-up if it is still out, so you never end up marked overdue.</p>
+
+                        <ul class="email-perks" id="emailPerks">
+                            <li>Reminder when it is due</li>
+                            <li>Follow-up if not returned</li>
+                            <li>Takes 10 seconds</li>
+                        </ul>
+
+                        <div class="email-form" id="emailForm">
+                            <input id="myPhone" class="email-input" type="email" inputmode="email"
+                                   autocomplete="email" placeholder="yourname@gmail.com" maxlength="100"
+                                   aria-label="Your email address">
+                            <button id="savePhoneBtn" class="email-btn" type="button">Turn on reminders</button>
+                        </div>
+
+                        <p id="phoneMessage" class="email-msg" role="status" aria-live="polite"></p>
+
+                        <div id="emailOn" class="email-on hidden">
+                            <span>Reminders will be sent to <strong id="emailShown"></strong></span>
+                            <button id="changeEmailBtn" class="email-link" type="button">Change email</button>
+                        </div>
+
+                        <p class="email-privacy" id="emailPrivacy">Only the laboratory uses your email, and only for borrowing reminders.</p>
+                    </div>
+                </section>
 
                 <div class="stats-grid">
                     <div class="stat-card">

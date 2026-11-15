@@ -341,6 +341,40 @@ function normalizeEmail(value) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? v : null;
 }
 
+// Shows the email card either as "action needed" (no email yet) or as
+// "all set" (email saved, with a Change button).
+function setEmailState(email, justSaved) {
+    const card = $("phoneBox");
+    const on = Boolean(email);
+
+    card.classList.toggle("needs-email", !on);
+    card.classList.toggle("is-on", on);
+    card.classList.toggle("just-saved", Boolean(justSaved));
+
+    $("emailTag").textContent = on ? "Reminders on" : "Action needed";
+    $("emailTitle").textContent = on
+        ? "You're all set"
+        : "Turn on your email reminders";
+    $("emailText").textContent = on
+        ? "We will email you when your borrowed equipment is due, and again if it is still not returned."
+        : "Get an email when your borrowed equipment is due, and a follow-up if it is still out, so you never end up marked overdue.";
+
+    $("emailPerks").classList.toggle("hidden", on);
+    $("emailForm").classList.toggle("hidden", on);
+    $("emailPrivacy").classList.toggle("hidden", on);
+    $("emailOn").classList.toggle("hidden", !on);
+    $("savePhoneBtn").textContent = "Turn on reminders";
+
+    if (on) $("emailShown").textContent = maskEmail(email);
+    $("myPhone").value = email || "";
+}
+
+// juan.delacruz@gmail.com -> j***@gmail.com
+function maskEmail(email) {
+    const [name, domain] = String(email).split("@");
+    return name ? name.charAt(0) + "***@" + (domain || "") : email;
+}
+
 async function loadMyPhone() {
     if (!me) return;
     const { data, error } = await db.from("students")
@@ -350,25 +384,56 @@ async function loadMyPhone() {
         return;
     }
     $("phoneBox").classList.remove("hidden");
-    $("myPhone").value = (data && data.email) || "";
+    $("phoneMessage").textContent = "";
+    setEmailState(data && data.email);
 }
+
+$("changeEmailBtn").addEventListener("click", () => {
+    const card = $("phoneBox");
+    card.classList.remove("is-on", "just-saved");
+    $("emailTag").textContent = "Change email";
+    $("emailTitle").textContent = "Update your email";
+    $("emailForm").classList.remove("hidden");
+    $("emailOn").classList.add("hidden");
+    $("emailText").textContent = "Type the email where you want your reminders.";
+    $("savePhoneBtn").textContent = "Save email";
+    $("phoneMessage").textContent = "";
+    $("myPhone").focus();
+    $("myPhone").select();
+});
 
 $("savePhoneBtn").addEventListener("click", async () => {
     if (!me) return;
     const msg = $("phoneMessage");
+    const button = $("savePhoneBtn");
     const email = normalizeEmail($("myPhone").value);
+    msg.classList.remove("ok");
+
     if (!email) {
         msg.textContent = "Enter a valid email address, for example juan@gmail.com.";
+        $("myPhone").focus();
         return;
     }
+
+    button.disabled = true;
     const { data, error } = await db.from("students")
         .update({ email }).eq("id_number", me.id).select("id_number");
+    button.disabled = false;
+
     if (error || !data || !data.length) {
         msg.textContent = "Could not save your email. Please tell the laboratory administrator.";
         return;
     }
-    $("myPhone").value = email;
-    msg.textContent = "Saved. You will be emailed when your equipment is due.";
+
+    msg.textContent = "";
+    setEmailState(email, true);
+});
+
+$("myPhone").addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+        event.preventDefault();
+        $("savePhoneBtn").click();
+    }
 });
 
 $("logoutBtn").addEventListener("click", () => {
