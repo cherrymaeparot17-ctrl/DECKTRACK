@@ -618,13 +618,26 @@ async function loadStudents() {
     renderDashboard();
 }
 
+let emailFilter = "all";
+
+function hasEmail(s) { return Boolean(normalizeEmail(s.email)); }
+
 function renderStudents() {
     const search = $("studentSearch").value.toLowerCase();
 
     const filtered = students.filter(s =>
-        String(s.name || "").toLowerCase().includes(search) ||
-        String(s.id_number || "").toLowerCase().includes(search)
+        (String(s.name || "").toLowerCase().includes(search) ||
+         String(s.id_number || "").toLowerCase().includes(search)) &&
+        (emailFilter === "all" ||
+         (emailFilter === "has" && hasEmail(s)) ||
+         (emailFilter === "missing" && !hasEmail(s)))
     );
+
+    // How many people have an email (encourages filling in the rest).
+    const withEmail = students.filter(hasEmail).length;
+    const pct = students.length ? Math.round((withEmail / students.length) * 100) : 0;
+    $("fillText").textContent = `${withEmail} of ${students.length} have an email (${pct}%)`;
+    $("fillBar").style.width = pct + "%";
 
     $("studentCount").textContent = `${filtered.length} person(s)`;
 
@@ -641,18 +654,40 @@ function renderStudents() {
                         data-email-for="${escapeHTML(s.id_number)}"
                         ${smsReady ? "" : "disabled"}>
                 </td>
-                <td>
+                <td class="row-actions">
                     <button class="save-btn" data-save="${escapeHTML(s.id_number)}"
                         ${smsReady ? "" : "disabled"}>Save</button>
+                    <button class="msg-btn" data-msg="${escapeHTML(s.id_number)}"
+                        ${hasEmail(s) ? "" : "disabled"}
+                        title="${hasEmail(s) ? "Write to this person" : "No email saved yet"}">Message</button>
                 </td>
             </tr>
         `).join("")
         : emptyRow(5, "No students found.");
+
+    renderRecipientList();
+    updateToInfo();
 }
+
+$("emailFilter").addEventListener("click", event => {
+    const button = event.target.closest("[data-filter]");
+    if (!button) return;
+    emailFilter = button.dataset.filter;
+    document.querySelectorAll("#emailFilter button")
+        .forEach(b => b.classList.toggle("active", b === button));
+    renderStudents();
+});
 
 $("studentSearch").addEventListener("input", renderStudents);
 
 $("studentTable").addEventListener("click", async event => {
+    const msgButton = event.target.closest("[data-msg]");
+    if (msgButton) {
+        const person = students.find(s => String(s.id_number) === msgButton.dataset.msg);
+        if (person) writeTo(person);
+        return;
+    }
+
     const button = event.target.closest("[data-save]");
     if (!button) return;
 
@@ -695,7 +730,223 @@ $("studentTable").addEventListener("click", async event => {
     }
 });
 
-// Sends the emails that are waiting right now (the same job also runs automatically every 15 minutes).
+// ==========================================
+// SEND A MESSAGE (Lab In-Charge writes to borrowers)
+// ==========================================
+
+const MSG_MAX = 2000;
+let msgMode = "one";
+
+const MSG_TEMPLATES = {
+    return: {
+        subject: "Please return your borrowed equipment",
+        body: "Please return the equipment you borrowed to the Computer Engineering Laboratory as soon as possible, so other students can use it.\n\nThank you."
+    },
+    notice: {
+        subject: "Laboratory notice",
+        body: "Please take note of the following:\n\n(Write your notice here.)\n\nThank you."
+    },
+    thanks: {
+        subject: "Thank you for returning the equipment",
+        body: "Thank you for returning the equipment on time and in good condition. We appreciate it!"
+    }
+};
+
+const personLabel = s => `${s.name} (${s.id_number})`;
+
+function renderRecipientList() {
+    $("recipientList").innerHTML = students
+        .filter(hasEmail)
+        .map(s => `<option value="${escapeHTML(personLabel(s))}"></option>`)
+        .join("");
+}
+
+// Finds the person typed into the "To" box ("Name (ID)", an ID, or an exact name).
+function findRecipient() {
+    const text = $("msgTo").value.trim();
+    if (!text) return null;
+    const idInBrackets = text.match(/\(([^)]+)\)\s*$/);
+    const key = (idInBrackets ? idInBrackets[1] : text).toLowerCase();
+    return students.find(s =>
+        String(s.id_number).toLowerCase() === key ||
+        String(s.name || "").toLowerCase() === key
+    ) || null;
+}
+
+function groupRecipients(group) {
+    const ids = new Set(
+        transactions
+            .filter(t => t.status === "Borrowed" && (group === "borrowing" || isOverdue(t)))
+            .map(t => String(t.borrowerId))
+    );
+    const people = [...ids]
+        .map(id => students.find(s => String(s.id_number) === id))
+        .filter(Boolean);
+    return {
+        total: ids.size,
+        withEmail: people.filter(hasEmail).length
+    };
+}
+
+function updateToInfo() {
+    const info = $("toInfo");
+    info.className = "to-info";
+
+    if (msgMode === "one") {
+        const person = findRecipient();
+        if (!$("msgTo").value.trim()) {
+            info.textContent = "";
+        } else if (!person) {
+            info.textContent = "Pick a person from the list.";
+            info.classList.add("warn");
+        } else if (!hasEmail(person)) {
+            info.textContent = `${person.name} has no email saved yet.`;
+            info.classList.add("warn");
+        } else {
+            info.textContent = `Will be sent to ${person.email}`;
+            info.classList.add("ok");
+        }
+        return;
+    }
+
+    const { total, withEmail } = groupRecipients(msgMode);
+    const skipped = total - withEmail;
+    if (!total) {
+        info.textContent = msgMode === "overdue"
+            ? "Nobody is overdue right now."
+            : "Nobody is borrowing equipment right now.";
+        info.classList.add("warn");
+    } else {
+        info.textContent =
+            `${withEmail} borrower(s) will receive this` +
+            (skipped ? `. ${skipped} have no email and will be skipped.` : ".");
+        info.classList.add(withEmail ? "ok" : "warn");
+    }
+}
+
+function setMode(mode) {
+    msgMode = mode;
+    document.querySelectorAll("#toMode button")
+        .forEach(b => b.classList.toggle("active", b.dataset.mode === mode));
+    $("toOne").classList.toggle("hidden", mode !== "one");
+    updateToInfo();
+}
+
+// Used by the "Message" button in the table.
+function writeTo(person) {
+    setMode("one");
+    $("msgTo").value = personLabel(person);
+    updateToInfo();
+    $("composer").scrollIntoView({ behavior: "smooth", block: "start" });
+    setTimeout(() => $("msgSubject").focus(), 350);
+}
+
+function updateMsgCount() {
+    $("msgCount").textContent = `${$("msgBody").value.length} / ${MSG_MAX}`;
+}
+
+$("toMode").addEventListener("click", event => {
+    const button = event.target.closest("[data-mode]");
+    if (button) setMode(button.dataset.mode);
+});
+$("msgTo").addEventListener("input", updateToInfo);
+$("msgBody").addEventListener("input", updateMsgCount);
+
+document.querySelector(".templates").addEventListener("click", event => {
+    const button = event.target.closest("[data-template]");
+    if (!button) return;
+    const t = MSG_TEMPLATES[button.dataset.template];
+    $("msgSubject").value = t.subject;
+    $("msgBody").value = t.body;
+    updateMsgCount();
+    $("msgBody").focus();
+});
+
+// Reads the real error text the function sent back (for example the daily limit).
+async function functionErrorText(error) {
+    try {
+        const detail = await error.context.json();
+        if (detail && detail.error) return detail.error;
+    } catch (_) { /* fall through */ }
+    return null;
+}
+
+$("sendMsgBtn").addEventListener("click", async () => {
+    const button = $("sendMsgBtn");
+    const result = $("msgResult");
+    const subject = $("msgSubject").value.trim();
+    const message = $("msgBody").value.trim();
+
+    const fail = text => {
+        result.className = "message error";
+        result.textContent = text;
+    };
+
+    let to;
+    let count;
+
+    if (msgMode === "one") {
+        const person = findRecipient();
+        if (!person) return fail("Pick a person from the list first.");
+        if (!hasEmail(person)) return fail(`${person.name} has no email saved yet.`);
+        to = { type: "students", ids: [String(person.id_number)] };
+        count = 1;
+    } else {
+        const { withEmail } = groupRecipients(msgMode);
+        if (!withEmail) return fail("Nobody in this group has an email to send to.");
+        to = { type: "group", group: msgMode };
+        count = withEmail;
+    }
+
+    if (subject.length < 3) return fail("Please write a subject.");
+    if (message.length < 3) return fail("Please write your message.");
+
+    if (count > 1 && !confirm(`Send this email to ${count} people?`)) return;
+
+    button.disabled = true;
+    result.className = "message";
+    result.textContent = "Sending...";
+
+    try {
+        const { data, error } = await db.functions.invoke("send-message", {
+            body: {
+                sender_id: sessionStorage.getItem("deckInstId"),
+                subject, message, to
+            }
+        });
+
+        if (error) throw error;
+
+        const sent = data?.sent ?? 0;
+        const noEmail = data?.no_email ?? 0;
+        const failed = data?.failed ?? 0;
+
+        result.className = "message " + (failed || !sent ? "error" : "success");
+        result.textContent = sent
+            ? `Sent to ${sent} ${sent === 1 ? "person" : "people"}` +
+              (noEmail ? `, ${noEmail} skipped (no email)` : "") +
+              (failed ? `, ${failed} failed` : "") + "."
+            : "Nothing was sent." + (failed ? " The email service refused it. Check the function logs." : "");
+
+        if (sent && !failed) {
+            $("msgSubject").value = "";
+            $("msgBody").value = "";
+            if (msgMode === "one") $("msgTo").value = "";
+            updateMsgCount();
+            updateToInfo();
+        }
+    } catch (err) {
+        console.error(err);
+        const detail = await functionErrorText(err);
+        fail(detail || "Could not send. Check that the send-message function is deployed.");
+    } finally {
+        button.disabled = false;
+    }
+});
+
+updateMsgCount();
+
+// Sends the emails that are waiting right now (the same job also runs automatically every minute).
 $("sendDueBtn").addEventListener("click", async () => {
     const button = $("sendDueBtn");
     const message = $("sendDueMessage");

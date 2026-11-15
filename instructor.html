@@ -318,28 +318,115 @@
             <section id="students" class="page">
                 <div class="section-heading">
                     <div>
-                        <h1>Students &amp; Email Reminders</h1>
-                        <p>Students add their own email on the Student Portal. You can also type or fix it here.</p>
+                        <h1>Students &amp; Emails</h1>
+                        <p>Reminders go out by themselves. Write to a borrower or a group, and keep everyone's email up to date.</p>
                     </div>
                 </div>
 
-                <div class="content-card">
-                    <h3>Due-Date Email Reminders</h3>
-                    <div class="info-box">
-                        An email is sent to a borrower when the <strong>return time</strong> they chose is reached, and
-                        <strong>one more</strong> 2 hours later if the equipment is still not returned. This runs automatically
-                        (checked every 15 minutes), so you don't need to click anything.
-                        Use the button to send any that are waiting right now.
+                <div class="mail-grid">
+                    <!-- Automatic reminders -->
+                    <div class="content-card mail-card">
+                        <div class="mail-card-head">
+                            <div class="mail-ic" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+                            </div>
+                            <div>
+                                <h3>Automatic reminders</h3>
+                                <span class="live-pill"><i></i> ON &middot; checks every minute</span>
+                            </div>
+                        </div>
+
+                        <ol class="flow">
+                            <li>
+                                <span class="dot">1</span>
+                                <div><strong>Return time is reached</strong><small>The borrower gets a "due now" email.</small></div>
+                            </li>
+                            <li>
+                                <span class="dot">2</span>
+                                <div><strong>2 hours later, still not returned</strong><small>One follow-up email is sent.</small></div>
+                            </li>
+                            <li class="done">
+                                <span class="dot">&#10003;</span>
+                                <div><strong>Returned</strong><small>No more emails for that item.</small></div>
+                            </li>
+                        </ol>
+
+                        <div class="sms-actions">
+                            <button class="primary-btn" id="sendDueBtn" type="button">Send due emails now</button>
+                            <span id="sendDueMessage" class="message" style="margin:0"></span>
+                        </div>
+                        <p class="mail-hint">You never have to click this. It only sends what is waiting right now.</p>
                     </div>
-                    <div class="sms-actions">
-                        <button class="primary-btn" id="sendDueBtn">Send Due-Date Emails Now</button>
-                        <span id="sendDueMessage" class="message" style="margin:0"></span>
+
+                    <!-- Composer -->
+                    <div class="content-card mail-card" id="composer">
+                        <div class="mail-card-head">
+                            <div class="mail-ic pink" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"></path><path d="m13.5 6.5 4 4"></path></svg>
+                            </div>
+                            <div>
+                                <h3>Send a message</h3>
+                                <p class="muted" style="margin:2px 0 0">Email one borrower or a whole group.</p>
+                            </div>
+                        </div>
+
+                        <div class="seg" id="toMode" role="group" aria-label="Who to send to">
+                            <button type="button" class="active" data-mode="one">One person</button>
+                            <button type="button" data-mode="overdue">Overdue borrowers</button>
+                            <button type="button" data-mode="borrowing">Everyone borrowing</button>
+                        </div>
+
+                        <div id="toOne" class="mail-field">
+                            <label for="msgTo">To</label>
+                            <input id="msgTo" list="recipientList" placeholder="Search a name or ID number" autocomplete="off">
+                            <datalist id="recipientList"></datalist>
+                        </div>
+                        <p id="toInfo" class="to-info"></p>
+
+                        <div class="templates" aria-label="Quick messages">
+                            <span>Quick start:</span>
+                            <button type="button" data-template="return">Return reminder</button>
+                            <button type="button" data-template="notice">Lab notice</button>
+                            <button type="button" data-template="thanks">Thank you</button>
+                        </div>
+
+                        <div class="mail-field">
+                            <label for="msgSubject">Subject</label>
+                            <input id="msgSubject" maxlength="120" placeholder="What is this about?">
+                        </div>
+                        <div class="mail-field">
+                            <label for="msgBody">Message</label>
+                            <textarea id="msgBody" rows="6" maxlength="2000" placeholder="Write your message here..."></textarea>
+                        </div>
+
+                        <div class="composer-foot">
+                            <span id="msgCount" class="muted">0 / 2000</span>
+                            <button class="primary-btn" id="sendMsgBtn" type="button">Send email</button>
+                        </div>
+                        <p id="msgResult" class="message" role="status" aria-live="polite"></p>
                     </div>
                 </div>
 
+                <!-- Student emails -->
                 <div class="content-card">
+                    <div class="fill-head">
+                        <div>
+                            <h3>Student emails</h3>
+                            <p class="muted" style="margin:2px 0 0">Reminders can only reach people who have an email saved. Students can add theirs on the Borrower Portal, or you can type it here.</p>
+                        </div>
+                        <div class="fill-meter">
+                            <strong id="fillText">0 of 0</strong>
+                            <div class="bar"><div id="fillBar"></div></div>
+                        </div>
+                    </div>
+
                     <div class="toolbar">
                         <input type="search" id="studentSearch" placeholder="Search name or ID number...">
+                        <div class="chips" id="emailFilter" role="group" aria-label="Filter by email">
+                            <button type="button" class="active" data-filter="all">All</button>
+                            <button type="button" data-filter="missing">No email</button>
+                            <button type="button" data-filter="has">Has email</button>
+                        </div>
                         <span class="muted" id="studentCount"></span>
                     </div>
                     <div class="table-wrap">
